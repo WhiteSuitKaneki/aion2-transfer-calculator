@@ -1,0 +1,9 @@
+# Netlify: serves planner.html as the home page and runs the two price functions in netlify/functions
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/"
+  to = "/planner.html"
+  status = 200
