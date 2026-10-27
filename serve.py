@@ -5,6 +5,7 @@ Run:  python serve.py      (opens http://127.0.0.1:8765/planner.html)
 """
 import json
 import os
+import threading
 import time
 import urllib.request
 import webbrowser
@@ -33,10 +34,38 @@ def g2g_offers(sort):
             for o in results if (o.get("converted_unit_price") or o.get("unit_price"))]
 
 
+# G2G has no price history, so keep our own (same shape as the Netlify version): 8 days, about 2 an hour
+HISTORY_FILE = Path(__file__).parent / "g2g_history.json"
+HISTORY_KEEP = 8 * 86400
+HISTORY_GAP = 25 * 60
+_history_lock = threading.Lock()
+
+
+def trusted(o):
+    return (o.get("satisfaction") or 0) >= 0.95 and (o.get("orders") or 0) >= 20
+
+
+def record_snapshot(rate):
+    with _history_lock:
+        try:
+            history = json.loads(HISTORY_FILE.read_text())
+        except (OSError, ValueError):
+            history = []
+        if not history or rate["at"] - history[-1]["at"] >= HISTORY_GAP:
+            history.append({"at": rate["at"],
+                            "recommended": rate["recommended"][0]["price"] if rate["recommended"] else None,
+                            "trusted": next((o["price"] for o in rate["lowest"] if trusted(o)), None),
+                            "lowest": rate["lowest"][0]["price"] if rate["lowest"] else None})
+            history = [h for h in history if rate["at"] - h["at"] <= HISTORY_KEEP]
+            HISTORY_FILE.write_text(json.dumps(history))
+        return history
+
+
 def g2g_rate():
-    """G2G's own ranking (recommended) and the cheapest offers, both in G2G's order."""
-    return json.dumps({"recommended": g2g_offers("recommended_v4"), "lowest": g2g_offers("lowest_price"),
-                       "at": int(time.time())}).encode()
+    """G2G's own ranking (recommended) and the cheapest offers, both in G2G's order, plus recorded history."""
+    rate = {"recommended": g2g_offers("recommended_v4"), "lowest": g2g_offers("lowest_price"), "at": int(time.time())}
+    rate["history"] = record_snapshot(rate)
+    return json.dumps(rate).encode()
 
 
 class Handler(SimpleHTTPRequestHandler):

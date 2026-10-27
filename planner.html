@@ -150,6 +150,18 @@ td:first-child { text-align: left; white-space: normal; }
 .listed { font-size: 12px; color: var(--faint); }
 .listed.thin { color: var(--bad); }
 .subtotal { font-family: var(--num); font-weight: 600; }
+.trend { display: block; font: 600 11px var(--num); margin-top: 3px; color: var(--faint); }
+.trend.up { color: var(--bad); }
+.trend.down { color: var(--good); }
+.shop .trend, .g2g .trend { display: inline; margin: 0 0 0 8px; }
+.steps-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.steps-head .section-title { margin: 0; }
+.trend-pick { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.trend-pick .seg { grid-template-columns: repeat(4, auto); }
+.trend-pick .seg button { padding: 4px 10px; font-size: 13px; }
+.trend-sum { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 14px; background: var(--abyss-2); color: var(--muted); }
+.trend-sum b { font-family: var(--num); }
+.trend-sum .up { color: var(--bad); } .trend-sum .down { color: var(--good); }
 
 .shop { padding: 18px 20px; margin-top: 20px; }
 .shop ul { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 32px; }
@@ -219,7 +231,12 @@ td:first-child { text-align: left; white-space: normal; }
     <section class="card compare" id="compare" aria-label="Where to start"></section>
   </div>
 
-  <h2 class="section-title">Materials for each step</h2>
+  <div class="steps-head"><h2 class="section-title">Materials for each step</h2>
+    <div class="trend-pick"><span>Price change over</span>
+      <div class="seg" role="group" aria-label="Price change period" id="trend-win">
+        <button type="button" data-win="1h">1h</button><button type="button" data-win="6h">6h</button>
+        <button type="button" data-win="24h">24h</button><button type="button" data-win="7d">7d</button>
+      </div></div></div>
   <div id="steps"></div>
   <section class="card shop" id="shop"></section>
   <p class="note" id="note"></p>
@@ -247,8 +264,10 @@ const state = {
   overrides: store.get("fl.overrides", {}),
   usdPerMil: store.get("fl2.usdPerMil", 0.8212), // RMT value of 1,000,000 kinah
   rateMode: store.get("fl2.rateMode", "recommended"), // recommended | trusted | lowest | manual
+  win: store.get("fl2.win", "24h"), // price-change period: 1h | 6h | 24h | 7d
 };
-const market = store.get("fl.market", {}); // name -> {found, price, listings, at}
+const WINDOWS = ["1h", "6h", "24h", "7d"]; // periods aion2.exchange accepts
+const market = store.get("fl.market", {}); // name -> {found, price, listings, at, trend: {period: {pct, basis, at}}}
 const inflight = new Map();
 
 // ---------- data helpers ----------
@@ -277,40 +296,64 @@ function marketText(name) {
   return `${fmt(p)} on market${m.listings != null ? ` · ${m.listings} listed` : ""}`;
 }
 
+// % change of the cheapest listing over the chosen period (null when unknown)
+function changeOf(name) {
+  const t = market[name]?.trend?.[state.win];
+  return t && Number.isFinite(t.pct) ? t : null;
+}
+function trendTag(name) {
+  const t = changeOf(name);
+  if (!t) return market[name]?.found && market[name]?.trend?.[state.win] ? `<span class="trend">no ${state.win} history</span>` : "";
+  const dir = t.pct > 0.05 ? "up" : t.pct < -0.05 ? "down" : "flat";
+  const since = t.basis ? ` (compared with ${t.basis >= 86400 ? `${(t.basis / 86400).toFixed(1)} days` : `${Math.max(1, Math.round(t.basis / 3600))} h`} ago)` : "";
+  return `<span class="trend ${dir}" title="Price change over ${state.win}${since}">${dir === "up" ? "▲" : dir === "down" ? "▼" : "•"} ${Math.abs(t.pct).toFixed(1)}%</span>`;
+}
+// Cost of the same market items now vs at the start of the period (items with history only)
+function trendSummary(list) {
+  let now = 0, then = 0;
+  for (const [n, q] of list) {
+    const t = changeOf(n), m = market[n];
+    if (!t || !m?.found || state.overrides[n] != null) continue;
+    now += m.price * q; then += m.price / (1 + t.pct / 100) * q;
+  }
+  return then ? { diff: now - then, pct: (now / then - 1) * 100 } : null;
+}
+
 // ---------- market fetching ----------
 function pick(item, words, avoid = []) {
   for (const [k, v] of Object.entries(item))
     if (typeof v === "number" && words.every(w => k.includes(w)) && !avoid.some(a => k.includes(a))) return v;
   return null;
 }
+const fresh = n => { const m = market[n], t = m?.trend?.[state.win]; return !!m && Date.now() - m.at < CACHE_MS && !!t && Date.now() - t.at < CACHE_MS; };
 async function lookup(name) {
-  const hit = market[name];
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit;
-  if (inflight.has(name)) return inflight.get(name);
+  const win = state.win, key = `${name}|${win}`;
+  if (fresh(name)) return market[name];
+  if (inflight.has(key)) return inflight.get(key);
   const p = (async () => {
-    const qs = new URLSearchParams({ server: SERVER, q: name, sort: "name", order: "asc", window: "24h", limit: 50, offset: 0 });
+    const qs = new URLSearchParams({ server: SERVER, q: name, sort: "name", order: "asc", window: win, limit: 50, offset: 0 });
     const res = await fetch(`${API}/items?${qs}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const items = Array.isArray(data) ? data : data.items || [];
     const lc = name.toLowerCase();
     const it = items.find(i => (i.name || "").toLowerCase() === lc) || items.find(i => (i.name || "").toLowerCase().startsWith(lc));
-    const price = it && (pick(it, ["min", "price"]) ?? pick(it, ["cheapest"]) ?? pick(it, ["current", "price"]) ??
-      pick(it, ["price"], ["change", "pct", "avg", "max"]));
+    const price = it && (typeof it.price === "number" ? it.price : pick(it, ["min", "price"]) ?? pick(it, ["price"], ["change", "pct", "avg", "max", "sold"]));
     if (it && price == null) console.warn("Unrecognised price fields for", name, it);
-    const rec = { found: !!it && price != null, price, listings: it ? pick(it, ["listing"]) : null, at: Date.now() };
+    const trend = { ...(market[name]?.trend || {}), [win]: { pct: it?.change_pct ?? null, basis: it?.change_basis_seconds ?? null, at: Date.now() } };
+    const rec = { found: !!it && price != null, price, listings: it ? it.listings ?? pick(it, ["listing"]) : null, at: Date.now(), trend };
     market[name] = rec;
     store.set("fl.market", market);
     return rec;
-  })().finally(() => inflight.delete(name));
-  inflight.set(name, p);
+  })().finally(() => inflight.delete(key));
+  inflight.set(key, p);
   return p;
 }
 const namesFor = s => [...new Set([...tierItems(s), ...s.steps.flatMap(x => Object.keys(x.materials))])];
 let loadToken = 0, lastError = null;
 async function loadPrices(names, force = false) {
   if (force) names.forEach(n => { if (market[n]) market[n].at = 0; });
-  const todo = names.filter(n => !(market[n] && Date.now() - market[n].at < CACHE_MS));
+  const todo = names.filter(n => !fresh(n));
   if (!todo.length) { setStatus("live"); render(); return; }
   const token = ++loadToken;
   let done = 0, failed = 0;
@@ -377,7 +420,8 @@ function renderChoices(s, items) {
   D.slots.forEach(x => (groups[x.group] ||= []).push(x));
   document.getElementById("slot").innerHTML = Object.entries(groups).map(([g, list]) => `<optgroup label="${g}">` +
     list.map(x => `<option ${x.slot === state.slot ? "selected" : ""}>${x.slot}</option>`).join("") + `</optgroup>`).join("");
-  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.target === state.target));
+  document.querySelectorAll(".seg button[data-target]").forEach(b => b.setAttribute("aria-pressed", +b.dataset.target === state.target));
+  document.querySelectorAll("#trend-win button").forEach(b => b.setAttribute("aria-pressed", b.dataset.win === state.win));
   document.getElementById("start").innerHTML = items.slice(0, state.target).map((it, k) =>
     `<option value="${k}" ${k === state.start ? "selected" : ""}>${esc(it)}</option>`).join("");
   document.getElementById("owned").checked = state.owned;
@@ -405,12 +449,19 @@ function renderReceipt(s, items, r) {
       ? `<div class="verdict good">Crafting saves <b class="num">${fmt(diff)}</b> kinah (${usd(diff)}) compared with buying it finished.</div>`
       : `<div class="verdict bad">Buying it finished is <b class="num">${fmt(-diff)}</b> kinah (${usd(-diff)}) cheaper than crafting.</div>`;
   }
+  const used = state.owned ? [] : [[start, 1]];
+  for (let i = state.start + 1; i <= state.target; i++) used.push(...Object.entries(s.steps[i - 1].materials));
+  const ts = trendSummary(used);
+  const trendLine = !ts ? "" : Math.abs(ts.pct) < 0.05
+    ? `<div class="trend-sum">Over the last ${state.win} this craft's cost hasn't changed.</div>`
+    : `<div class="trend-sum">Over the last ${state.win} this craft got <b class="${ts.diff > 0 ? "up" : "down"}">${ts.diff > 0 ? "▲" : "▼"} ${Math.abs(ts.pct).toFixed(1)}% ${ts.diff > 0 ? "pricier" : "cheaper"}</b>
+        (${ts.diff > 0 ? "+" : "−"}${fmt(Math.abs(ts.diff))} kinah${state.usdPerMil ? `, ${usd(Math.abs(ts.diff))}` : ""}).</div>`;
   const lucky = r.expected < r.full ? `<div><dt>Average cost with 25% great successes</dt><dd>${fmt(r.expected)}</dd></div>` : "";
   document.getElementById("receipt").innerHTML = `<ol>${lines.join("")}</ol>
     <div class="total-row"><span>Total kinah</span><b>${fmt(r.full)}</b></div>
     ${state.usdPerMil ? `<div class="total-usd">≈ ${usd(r.full)} USD</div>` : ""}
     <dl class="facts">${lucky}<div><dt>Buy ${esc(items[state.target])} finished</dt><dd>${buyGoal == null ? (market[items[state.target]] ? "not listed" : "…") : fmt(buyGoal)}</dd></div></dl>
-    ${verdict}`;
+    ${verdict}${trendLine}`;
 }
 function renderCompare(s, items) {
   const rows = [];
@@ -440,7 +491,7 @@ function renderSteps(s, items) {
       const p = priceOf(n), m = market[n];
       const listed = m && m.found && m.listings != null ? `<span class="listed ${m.listings < q ? "thin" : ""}">${m.listings}</span>` : `<span class="listed">—</span>`;
       return `<tr><td><div class="mat fam-${family(n)}"><span class="swatch"></span>${esc(n)}</div></td><td class="qty">×${q}</td>
-        <td>${priceCell(n)}</td><td>${listed}</td><td class="subtotal">${p == null ? `<span class="missing">no price</span>` : fmt(p * q)}</td></tr>`;
+        <td>${priceCell(n)}${trendTag(n)}</td><td>${listed}</td><td class="subtotal">${p == null ? `<span class="missing">no price</span>` : fmt(p * q)}</td></tr>`;
     }).join("");
     const isOpen = open.size ? open.has(String(i)) : i === state.start + 1;
     html += `<details class="card step" data-i="${i}" style="--tc:var(${TIER_COLOR[i]})" ${isOpen ? "open" : ""}>
@@ -457,7 +508,7 @@ function renderSteps(s, items) {
   for (let i = state.start + 1; i <= state.target; i++)
     Object.entries(s.steps[i - 1].materials).forEach(([n, q]) => shop[n] = (shop[n] || 0) + q);
   document.getElementById("shop").innerHTML = `<h2 class="section-title">Shopping list</h2><ul>${Object.entries(shop).map(([n, q]) =>
-    `<li><span class="mat fam-${family(n)}"><span class="swatch"></span>${esc(n)}</span><span class="q">×${q}</span></li>`).join("")}</ul>`;
+    `<li><span class="mat fam-${family(n)}"><span class="swatch"></span>${esc(n)}</span><span class="q">×${q}${trendTag(n)}</span></li>`).join("")}</ul>`;
 }
 function render() {
   const s = slotData(), items = tierItems(s);
@@ -473,7 +524,7 @@ function render() {
   renderCompare(s, items);
   renderSteps(s, items);
   document.getElementById("note").innerHTML =
-    `Prices are the cheapest listing on Siel (NAW). Buying many of one material can cost more when few are listed (red numbers). Crafting fees and failed crafts aren't included. A failed craft loses the materials but keeps your gear. Recipes: ${esc(D.source)}.`;
+    `Prices are the cheapest listing on Siel (NAW). ▲ red means a price went up over the chosen period, ▼ green means it went down. Buying many of one material can cost more when few are listed (red numbers). Crafting fees and failed crafts aren't included. A failed craft loses the materials but keeps your gear. Recipes: ${esc(D.source)}.`;
 }
 
 // ---------- RMT value from G2G ----------
@@ -499,6 +550,20 @@ function g2gPick(mode) {
   if (mode === "lowest") return g2g.lowest[0] || null;
   return null;
 }
+// G2G price change over the chosen period, from the snapshots the server records (G2G has no history of its own)
+const WIN_SECONDS = { "1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800 };
+function g2gTrend(mode) {
+  const now = g2gPick(mode), hist = (g2g?.history || []).filter(h => h[mode] != null);
+  if (!now || !hist.length) return "";
+  const span = WIN_SECONDS[state.win], target = g2g.at - span;
+  // the snapshot closest to the start of the period; if history is shorter, the oldest one we have
+  let base = [...hist].reverse().find(h => h.at <= target + span * 0.1) || hist[0];
+  const age = g2g.at - base.at;
+  if (age < Math.min(span * 0.5, 1800)) return ` <span class="trend">no ${state.win} history yet</span>`;
+  const pct = (now.price / base[mode] - 1) * 100, dir = pct > 0.05 ? "up" : pct < -0.05 ? "down" : "flat";
+  const since = age < span * 0.9 ? ` since ${age >= 86400 ? `${(age / 86400).toFixed(1)} days` : `${Math.max(1, Math.round(age / 3600))} h`} ago` : "";
+  return ` <span class="trend ${dir}" title="Was $${base[mode]} ${ago(base.at * 1000)}">${dir === "up" ? "▲" : dir === "down" ? "▼" : "•"} ${Math.abs(pct).toFixed(1)}%${since}</span>`;
+}
 function applyG2G() {
   const input = document.getElementById("usd-rate"), info = document.getElementById("g2g-info");
   const link = `<a href="${G2G_URL}" target="_blank" rel="noopener">Siel Elyos on G2G</a>`;
@@ -509,15 +574,17 @@ function applyG2G() {
     info.innerHTML = `${g2gError ? `Live G2G prices unavailable (${esc(g2gError)}). Using the rate in the box.` : "Loading G2G prices…"} · ${link}`;
     return;
   }
-  const seller = o => o ? `<b>$${o.price}</b> ${esc(o.seller)}${o.orders ? ` (${o.orders} sold)` : ""}` : "—";
-  info.innerHTML = `Recommended ${seller(g2gPick("recommended"))} · Cheapest trusted ${seller(g2gPick("trusted"))} · ` +
-    `Cheapest ${seller(g2gPick("lowest"))} · checked ${ago(g2g.at * 1000)} · ${link}`;
+  const seller = mode => { const o = g2gPick(mode); return o ? `<b>$${o.price}</b> ${esc(o.seller)}${o.orders ? ` (${o.orders} sold)` : ""}${g2gTrend(mode)}` : "—"; };
+  info.innerHTML = `Recommended ${seller("recommended")} · Cheapest trusted ${seller("trusted")} · ` +
+    `Cheapest ${seller("lowest")} · change over ${state.win} · checked ${ago(g2g.at * 1000)} · ${link}`;
 }
 
 // ---------- events ----------
 const save = () => { store.set("fl2.slot", state.slot); store.set("fl2.start", state.start); store.set("fl2.owned", state.owned); store.set("fl2.target", state.target); };
 document.addEventListener("click", e => {
-  const seg = e.target.closest(".seg button");
+  const win = e.target.closest("#trend-win button");
+  if (win) { state.win = win.dataset.win; store.set("fl2.win", state.win); applyG2G(); render(); return loadPrices(namesFor(slotData())); }
+  const seg = e.target.closest(".seg button[data-target]");
   if (seg) { state.target = +seg.dataset.target; save(); return render(); }
   const opt = e.target.closest(".compare button");
   if (opt) { state.start = +opt.dataset.start; state.owned = false; save(); return render(); }
@@ -541,6 +608,7 @@ document.addEventListener("change", e => {
 document.getElementById("refresh").addEventListener("click", () => loadPrices(namesFor(slotData()), true));
 
 if (![2, 4, 6].includes(state.target)) state.target = 6;
+if (!WINDOWS.includes(state.win)) state.win = "24h";
 document.getElementById("usd-rate").value = state.usdPerMil || "";
 document.getElementById("rate-mode").value = state.rateMode;
 applyG2G();
