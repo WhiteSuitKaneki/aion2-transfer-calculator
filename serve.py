@@ -15,7 +15,8 @@ from pathlib import Path
 
 PORT = int(os.environ.get("PORT", 8765))
 UPSTREAM = os.environ.get("AION2_UPSTREAM", "https://aion2.exchange")
-CACHE_SECONDS = 600
+CACHE_SECONDS = 600  # G2G
+API_CACHE_SECONDS = 180  # market listings sell fast
 _cache = {}
 
 # G2G listing for AION 2 kinah, Siel - Elyos [NA West] (price is USD per 1M kinah)
@@ -74,7 +75,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self._cached("/g2g/rate", g2g_rate)
         if not self.path.startswith("/api/"):
             return super().do_GET()
-        self._cached(self.path, self._upstream)
+        self._cached(self.path, self._upstream, API_CACHE_SECONDS)
 
     def _upstream(self):
         req = urllib.request.Request(UPSTREAM + self.path,
@@ -82,9 +83,9 @@ class Handler(SimpleHTTPRequestHandler):
         with urllib.request.urlopen(req, timeout=20) as r:
             return r.read()
 
-    def _cached(self, key, fetch):
+    def _cached(self, key, fetch, max_age=CACHE_SECONDS):
         hit = _cache.get(key)
-        if hit and time.time() - hit[0] < CACHE_SECONDS:
+        if hit and time.time() - hit[0] < max_age:
             return self._send(200, hit[1])
         try:
             body = fetch()

@@ -1,4 +1,4 @@
-// Relays /api/* to aion2.exchange (the browser can't call it directly) and caches results for 10 minutes.
+// Relays /api/* to aion2.exchange (the browser can't call it directly) and caches results for 3 minutes.
 const UPSTREAM = process.env.AION2_UPSTREAM || "https://aion2.exchange";
 
 export default async (req) => {
@@ -12,7 +12,7 @@ export default async (req) => {
       status: res.status,
       headers: {
         "Content-Type": "application/json",
-        ...(res.ok && { "Netlify-CDN-Cache-Control": "public, s-maxage=600, stale-while-revalidate=600, durable" }),
+        ...(res.ok && { "Netlify-CDN-Cache-Control": "public, s-maxage=180, durable" }),
       },
     });
   } catch (e) {

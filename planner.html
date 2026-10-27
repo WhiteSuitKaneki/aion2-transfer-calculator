@@ -247,7 +247,7 @@ td:first-child { text-align: left; white-space: normal; }
 const SERVER = 11201; // Siel (NAW)
 const API = location.protocol.startsWith("http") ? "/api" : "https://aion2.exchange/api";
 const GREAT_SUCCESS = 0.25; // crafting True/White/Wise has a 25% chance to come out Splendent, skipping the next step
-const CACHE_MS = 30 * 60 * 1000;
+const CACHE_MS = 5 * 60 * 1000; // listings sell fast, so don't trust a saved price for long
 const D = window.RECIPES;
 const TIER_COLOR = ["--unique", "--true", "--true", "--white", "--white", "--wise", "--wise"];
 const TIER_PATH = ["true", "true", "true", "white", "white", "wise", "wise"];
@@ -326,12 +326,13 @@ function pick(item, words, avoid = []) {
   return null;
 }
 const fresh = n => { const m = market[n], t = m?.trend?.[state.win]; return !!m && Date.now() - m.at < CACHE_MS && !!t && Date.now() - t.at < CACHE_MS; };
-async function lookup(name) {
+async function lookup(name, force = false) {
   const win = state.win, key = `${name}|${win}`;
-  if (fresh(name)) return market[name];
+  if (!force && fresh(name)) return market[name];
   if (inflight.has(key)) return inflight.get(key);
   const p = (async () => {
     const qs = new URLSearchParams({ server: SERVER, q: name, sort: "name", order: "asc", window: win, limit: 50, offset: 0 });
+    if (force) qs.set("fresh", Date.now()); // skip the server-side caches on Refresh
     const res = await fetch(`${API}/items?${qs}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -341,7 +342,7 @@ async function lookup(name) {
     const price = it && (typeof it.price === "number" ? it.price : pick(it, ["min", "price"]) ?? pick(it, ["price"], ["change", "pct", "avg", "max", "sold"]));
     if (it && price == null) console.warn("Unrecognised price fields for", name, it);
     const trend = { ...(market[name]?.trend || {}), [win]: { pct: it?.change_pct ?? null, basis: it?.change_basis_seconds ?? null, at: Date.now() } };
-    const rec = { found: !!it && price != null, price, listings: it ? it.listings ?? pick(it, ["listing"]) : null, at: Date.now(), trend };
+    const rec = { found: !!it && it.listed !== false && price != null, price, listings: it ? it.listings ?? pick(it, ["listing"]) : null, at: Date.now(), trend };
     market[name] = rec;
     store.set("fl.market", market);
     return rec;
@@ -362,7 +363,7 @@ async function loadPrices(names, force = false) {
   const worker = async () => {
     while (queue.length) {
       const n = queue.shift();
-      try { await lookup(n); } catch (e) { failed++; lastError = e; }
+      try { await lookup(n, force); } catch (e) { failed++; lastError = e; }
       done++;
       if (token === loadToken) { setStatus("loading", `Loading prices ${done}/${todo.length}`); render(); }
     }
@@ -469,10 +470,10 @@ function renderCompare(s, items) {
   const priced = rows.filter(x => !x.r.missing.length);
   const best = priced.length ? priced.reduce((a, b) => (b.r.full < a.r.full ? b : a)) : null;
   document.getElementById("compare").innerHTML = `<h2>Where to start</h2>
-    <p>Total cost if you buy each item on the market and craft from there. Tap one to use it.</p>
+    <p>Full cost to reach the goal from each starting point: buying that item plus every craft after it. Tap one to use it.</p>
     ${rows.map(({ k, r }) => `<button type="button" data-start="${k}" aria-pressed="${!state.owned && k === state.start}">
-      <span class="opt">Buy ${esc(items[k])}${best && best.k === k ? `<span class="best">Cheapest</span>` : ""}</span>
-      <span class="opt-sub">${marketText(items[k])}</span>
+      <span class="opt">Start from ${esc(items[k])}${best && best.k === k ? `<span class="best">Cheapest</span>` : ""}</span>
+      <span class="opt-sub">Item: ${marketText(items[k])}</span>
       <span class="opt-total">${r.missing.length ? `<span class="missing">incomplete</span>` : `${fmt(r.full)}<span class="usd" style="display:block;text-align:right">${usd(r.full)}</span>`}</span></button>`).join("")}`;
 }
 function priceCell(name) {
