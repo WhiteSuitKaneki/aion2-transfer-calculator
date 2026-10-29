@@ -79,6 +79,8 @@ main { max-width: 1040px; margin: 0 auto; padding: 24px 24px 64px; }
 .rate a:hover { color: var(--path); }
 .usd { font: 500 13px var(--num); color: var(--muted); }
 .rate-field { grid-column: 1 / -1; }
+.tax { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); margin-top: 10px; }
+.tax input { width: 56px; background: var(--abyss-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-family: var(--num); text-align: right; }
 .rate { flex-wrap: wrap; }
 .rate input:disabled { color: var(--path); border-style: dashed; cursor: default; }
 .rate select { background: var(--abyss-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; }
@@ -219,6 +221,8 @@ td:first-child { text-align: left; white-space: normal; }
           <option value="lowest">G2G cheapest offer</option>
           <option value="manual">My own rate</option>
         </select></div>
+      <label class="tax">Market tax on delivery <input id="tax" inputmode="decimal" aria-label="Market tax percent on RMT delivery"> % of bought kinah is lost (buy 100M, receive 90M)</label>
+      <label class="tax">G2G handling fee <input id="g2g-fee" inputmode="decimal" aria-label="G2G handling fee percent"> % added to the USD price</label>
       <div class="g2g" id="g2g-info"></div>
     </div>
   </section>
@@ -262,7 +266,9 @@ const state = {
   owned: store.get("fl2.owned", false), // true = you already have the start item
   target: store.get("fl2.target", 6),   // 2, 4 or 6
   overrides: store.get("fl.overrides", {}),
+  tax: store.get("fl2.tax", 10), // market tax % lost when RMT kinah is handed over through the market
   usdPerMil: store.get("fl2.usdPerMil", 0.8212), // RMT value of 1,000,000 kinah
+  g2gFee: store.get("fl2.g2gFee", 3.99), // G2G handling fee %, paid on top of the listed USD price
   rateMode: store.get("fl2.rateMode", "recommended"), // recommended | trusted | lowest | manual
   win: store.get("fl2.win", "24h"), // price-change period: 1h | 6h | 24h | 7d
 };
@@ -285,8 +291,10 @@ function priceOf(name) {
   const m = market[name];
   return m && m.found ? m.price : null;
 }
+// kinah you must buy on G2G to end up with n, since the market tax takes its cut on delivery
+const toBuy = n => n / (1 - state.tax / 100);
 const fmt = n => (n == null ? "—" : Math.round(n).toLocaleString("en-US"));
-const usd = n => (n == null || !state.usdPerMil ? "" : "$" + (n / 1e6 * state.usdPerMil).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const usd = n => (n == null || !state.usdPerMil ? "" : "$" + (toBuy(n) / 1e6 * state.usdPerMil * (1 + state.g2gFee / 100)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const esc = t => String(t).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 function marketText(name) {
   const m = market[name], p = priceOf(name);
@@ -460,7 +468,8 @@ function renderReceipt(s, items, r) {
   const lucky = r.expected < r.full ? `<div><dt>Average cost with 25% great successes</dt><dd>${fmt(r.expected)}</dd></div>` : "";
   document.getElementById("receipt").innerHTML = `<ol>${lines.join("")}</ol>
     <div class="total-row"><span>Total kinah</span><b>${fmt(r.full)}</b></div>
-    ${state.usdPerMil ? `<div class="total-usd">≈ ${usd(r.full)} USD</div>` : ""}
+    ${state.usdPerMil ? `<div class="total-usd">≈ ${usd(r.full)} USD</div>
+      <div class="usd" style="text-align:right">${state.tax ? `buy ${fmt(toBuy(r.full))} kinah on G2G to receive ${fmt(r.full)} after ${state.tax}% tax` : ""}${state.tax && state.g2gFee ? " · " : ""}${state.g2gFee ? `incl. ${state.g2gFee}% G2G fee` : ""}</div>` : ""}
     <dl class="facts">${lucky}<div><dt>Buy ${esc(items[state.target])} finished</dt><dd>${buyGoal == null ? (market[items[state.target]] ? "not listed" : "…") : fmt(buyGoal)}</dd></div></dl>
     ${verdict}${trendLine}`;
 }
@@ -525,7 +534,7 @@ function render() {
   renderCompare(s, items);
   renderSteps(s, items);
   document.getElementById("note").innerHTML =
-    `Prices are the cheapest listing on Siel (NAW). ▲ red means a price went up over the chosen period, ▼ green means it went down. Buying many of one material can cost more when few are listed (red numbers). Crafting fees and failed crafts aren't included. A failed craft loses the materials but keeps your gear. Recipes: ${esc(D.source)}.`;
+    `Prices are the cheapest listing on Siel (NAW). USD amounts include the kinah lost to market tax on RMT delivery and the G2G handling fee. ▲ red means a price went up over the chosen period, ▼ green means it went down. Buying many of one material can cost more when few are listed (red numbers). Crafting fees and failed crafts aren't included. A failed craft loses the materials but keeps your gear. Recipes: ${esc(D.source)}.`;
 }
 
 // ---------- RMT value from G2G ----------
@@ -596,6 +605,14 @@ document.addEventListener("change", e => {
   if (t.id === "start") { state.start = +t.value; save(); return render(); }
   if (t.id === "owned") { state.owned = t.checked; save(); return render(); }
   if (t.id === "rate-mode") { state.rateMode = t.value; store.set("fl2.rateMode", state.rateMode); applyG2G(); return render(); }
+  if (t.id === "g2g-fee") {
+    const v = parseFloat(t.value.replace(/[^\d.]/g, ""));
+    state.g2gFee = Number.isFinite(v) ? Math.min(v, 100) : 0; store.set("fl2.g2gFee", state.g2gFee); t.value = state.g2gFee; return render();
+  }
+  if (t.id === "tax") {
+    const v = parseFloat(t.value.replace(/[^\d.]/g, ""));
+    state.tax = Number.isFinite(v) ? Math.min(v, 90) : 0; store.set("fl2.tax", state.tax); t.value = state.tax; return render();
+  }
   if (t.id === "usd-rate") {
     const v = parseFloat(t.value.replace(/[^\d.]/g, ""));
     state.usdPerMil = Number.isFinite(v) ? v : 0; store.set("fl2.usdPerMil", state.usdPerMil); return render();
@@ -611,6 +628,8 @@ document.getElementById("refresh").addEventListener("click", () => loadPrices(na
 if (![2, 4, 6].includes(state.target)) state.target = 6;
 if (!WINDOWS.includes(state.win)) state.win = "24h";
 document.getElementById("usd-rate").value = state.usdPerMil || "";
+document.getElementById("tax").value = state.tax;
+document.getElementById("g2g-fee").value = state.g2gFee;
 document.getElementById("rate-mode").value = state.rateMode;
 applyG2G();
 loadG2G();
