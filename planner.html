@@ -106,10 +106,17 @@ h1 { font: 400 28px/1.15 var(--display); color: var(--unique); margin: 0 0 4px; 
 .total-row { display: flex; justify-content: space-between; align-items: baseline; padding-top: 14px; }
 .total-row span { font-size: 14px; color: var(--muted); }
 .total-row b { font: 600 32px var(--num); color: var(--path); }
+.buy-row { padding-top: 6px; }
+.buy-row b { font-size: 22px; color: var(--text); }
+.buy-row small { display: block; font-size: 12px; color: var(--faint); }
+.rmt { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.rmt-total dt { color: var(--text); font-weight: 600; }
+.rmt-total dd { font-size: 18px; color: var(--path); }
 .facts { margin: 12px 0 0; display: grid; gap: 6px; font-size: 14px; }
 .facts div { display: flex; justify-content: space-between; gap: 12px; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; font: 600 14px var(--num); }
+.estimate { margin: 12px 0 0; font-size: 12px; color: var(--faint); line-height: 1.5; }
 .verdict { margin-top: 14px; padding: 10px 12px; border-radius: 8px; font-size: 14px; background: var(--abyss-2); }
 .verdict.good { color: var(--good); }
 .verdict.bad { color: var(--bad); }
@@ -212,7 +219,7 @@ td:first-child { text-align: left; white-space: normal; }
     <div class="field"><span class="spacer">&nbsp;</span>
       <label class="own"><input type="checkbox" id="owned"> I already own it (don't count its price)</label>
     </div>
-    <div class="field rate-field"><span>Kinah value (RMT)</span>
+    <div class="field rate-field"><span>Kinah value</span>
       <div class="rate"><span>$</span><input id="usd-rate" inputmode="decimal" aria-label="US dollars per 1 million kinah">
         <span>USD per 1M kinah</span>
         <select id="rate-mode" aria-label="Where the kinah value comes from">
@@ -221,7 +228,7 @@ td:first-child { text-align: left; white-space: normal; }
           <option value="lowest">G2G cheapest offer</option>
           <option value="manual">My own rate</option>
         </select></div>
-      <label class="tax">Market tax on delivery <input id="tax" inputmode="decimal" aria-label="Market tax percent on RMT delivery"> % of bought kinah is lost (buy 100M, receive 90M)</label>
+      <label class="tax">Market tax on delivery <input id="tax" inputmode="decimal" aria-label="Market tax percent on kinah delivery"> % of bought kinah is lost (buy 100M, receive 90M)</label>
       <label class="tax">G2G handling fee <input id="g2g-fee" inputmode="decimal" aria-label="G2G handling fee percent"> % added to the USD price</label>
       <div class="g2g" id="g2g-info"></div>
     </div>
@@ -294,7 +301,8 @@ function priceOf(name) {
 // kinah you must buy on G2G to end up with n, since the market tax takes its cut on delivery
 const toBuy = n => n / (1 - state.tax / 100);
 const fmt = n => (n == null ? "—" : Math.round(n).toLocaleString("en-US"));
-const usd = n => (n == null || !state.usdPerMil ? "" : "$" + (toBuy(n) / 1e6 * state.usdPerMil * (1 + state.g2gFee / 100)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const money = v => "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const usd = n => (n == null || !state.usdPerMil ? "" : money(toBuy(n) / 1e6 * state.usdPerMil * (1 + state.g2gFee / 100)));
 const esc = t => String(t).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 function marketText(name) {
   const m = market[name], p = priceOf(name);
@@ -465,13 +473,17 @@ function renderReceipt(s, items, r) {
     ? `<div class="trend-sum">Over the last ${state.win} this craft's cost hasn't changed.</div>`
     : `<div class="trend-sum">Over the last ${state.win} this craft got <b class="${ts.diff > 0 ? "up" : "down"}">${ts.diff > 0 ? "▲" : "▼"} ${Math.abs(ts.pct).toFixed(1)}% ${ts.diff > 0 ? "pricier" : "cheaper"}</b>
         (${ts.diff > 0 ? "+" : "−"}${fmt(Math.abs(ts.diff))} kinah${state.usdPerMil ? `, ${usd(Math.abs(ts.diff))}` : ""}).</div>`;
-  const lucky = r.expected < r.full ? `<div><dt>Average cost with 25% great successes</dt><dd>${fmt(r.expected)}</dd></div>` : "";
+  const lucky = r.expected < r.full ? `<div><dt>Estimated average with 25% great successes</dt><dd>${fmt(r.expected)}</dd></div>` : "";
   document.getElementById("receipt").innerHTML = `<ol>${lines.join("")}</ol>
-    <div class="total-row"><span>Total kinah</span><b>${fmt(r.full)}</b></div>
-    ${state.usdPerMil ? `<div class="total-usd">≈ ${usd(r.full)} USD</div>
-      <div class="usd" style="text-align:right">${state.tax ? `buy ${fmt(toBuy(r.full))} kinah on G2G to receive ${fmt(r.full)} after ${state.tax}% tax` : ""}${state.tax && state.g2gFee ? " · " : ""}${state.g2gFee ? `incl. ${state.g2gFee}% G2G fee` : ""}</div>` : ""}
+    <div class="total-row"><span>Estimated total kinah</span><b>${fmt(r.full)}</b></div>
+    ${state.tax ? `<div class="total-row buy-row"><span>Kinah to buy after ${state.tax}% tax<small>you receive ${fmt(r.full)}</small></span><b>${fmt(toBuy(r.full))}</b></div>` : ""}
+    ${state.usdPerMil ? `<dl class="facts rmt">
+      <div><dt>${fmt(toBuy(r.full))} kinah × $${state.usdPerMil} per 1M</dt><dd>${money(toBuy(r.full) / 1e6 * state.usdPerMil)}</dd></div>
+      ${state.g2gFee ? `<div><dt>G2G handling fee ${state.g2gFee}%</dt><dd>${money(toBuy(r.full) / 1e6 * state.usdPerMil * state.g2gFee / 100)}</dd></div>` : ""}
+      <div class="rmt-total"><dt>Estimated total in USD</dt><dd>≈ ${usd(r.full)} USD</dd></div></dl>` : ""}
     <dl class="facts">${lucky}<div><dt>Buy ${esc(items[state.target])} finished</dt><dd>${buyGoal == null ? (market[items[state.target]] ? "not listed" : "…") : fmt(buyGoal)}</dd></div></dl>
-    ${verdict}${trendLine}`;
+    ${verdict}${trendLine}
+    <p class="estimate">These are estimates from the current cheapest listings. Real costs can differ: listings sell, prices move, and buying many of one item can cost more when few are listed.</p>`;
 }
 function renderCompare(s, items) {
   const rows = [];
@@ -479,11 +491,11 @@ function renderCompare(s, items) {
   const priced = rows.filter(x => !x.r.missing.length);
   const best = priced.length ? priced.reduce((a, b) => (b.r.full < a.r.full ? b : a)) : null;
   document.getElementById("compare").innerHTML = `<h2>Where to start</h2>
-    <p>Full cost to reach the goal from each starting point: buying that item plus every craft after it. Tap one to use it.</p>
+    <p>Estimated full cost to reach the goal from each starting point: buying that item plus every craft after it. Tap one to use it.</p>
     ${rows.map(({ k, r }) => `<button type="button" data-start="${k}" aria-pressed="${!state.owned && k === state.start}">
       <span class="opt">Start from ${esc(items[k])}${best && best.k === k ? `<span class="best">Cheapest</span>` : ""}</span>
       <span class="opt-sub">Item: ${marketText(items[k])}</span>
-      <span class="opt-total">${r.missing.length ? `<span class="missing">incomplete</span>` : `${fmt(r.full)}<span class="usd" style="display:block;text-align:right">${usd(r.full)}</span>`}</span></button>`).join("")}`;
+      <span class="opt-total">${r.missing.length ? `<span class="missing">incomplete</span>` : `${fmt(r.full)}${state.tax ? `<span class="usd" style="display:block;text-align:right">buy ${fmt(toBuy(r.full))}</span>` : ""}<span class="usd" style="display:block;text-align:right">${usd(r.full)}</span>`}</span></button>`).join("")}`;
 }
 function priceCell(name) {
   const ov = state.overrides[name] != null, m = market[name];
@@ -534,7 +546,7 @@ function render() {
   renderCompare(s, items);
   renderSteps(s, items);
   document.getElementById("note").innerHTML =
-    `Prices are the cheapest listing on Siel (NAW). USD amounts include the kinah lost to market tax on RMT delivery and the G2G handling fee. ▲ red means a price went up over the chosen period, ▼ green means it went down. Buying many of one material can cost more when few are listed (red numbers). Crafting fees and failed crafts aren't included. A failed craft loses the materials but keeps your gear. Recipes: ${esc(D.source)}.`;
+    `Prices are the cheapest listing on Siel (NAW). USD amounts include the kinah lost to market tax on delivery and the G2G handling fee. ▲ red means a price went up over the chosen period, ▼ green means it went down. Buying many of one material can cost more when few are listed (red numbers). Crafting fees and failed crafts aren't included. A failed craft loses the materials but keeps your gear. Recipes: ${esc(D.source)}.`;
 }
 
 // ---------- RMT value from G2G ----------
