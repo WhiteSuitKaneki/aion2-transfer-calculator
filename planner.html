@@ -116,6 +116,26 @@ h1 { font: 400 28px/1.15 var(--display); color: var(--unique); margin: 0 0 4px; 
 .facts div { display: flex; justify-content: space-between; gap: 12px; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; font: 600 14px var(--num); }
+.link { display: inline-block; margin-top: 8px; padding: 0; border: 0; background: none; font-size: 12px; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.link:hover { color: var(--path); }
+dialog.gen { width: min(460px, calc(100vw - 32px)); max-height: 88vh; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); }
+dialog.gen::backdrop { background: rgba(5, 9, 18, .7); }
+.gen-body { display: grid; gap: 12px; padding: 18px 20px 20px; }
+.gen-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.gen-head h2 { margin: 0; font: 400 20px var(--display); }
+.gen-x { border: 0; background: none; color: var(--muted); font-size: 20px; line-height: 1; padding: 4px 8px; cursor: pointer; }
+.gen-x:hover { color: var(--text); }
+.gen-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.gen-fields label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.gen-fields input { width: 100%; background: var(--abyss-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-family: var(--num); text-align: right; }
+.gen-sum { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.gen-sum b { font-family: var(--num); color: var(--text); }
+.gen-sum .bad { color: var(--bad); }
+.gen-list { list-style: none; margin: 0; padding: 0; max-height: 42vh; overflow-y: auto; border-top: 1px solid var(--line); }
+.gen-list li { padding: 9px 2px; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+.gen-list label { display: flex; align-items: center; gap: 10px; cursor: pointer; font: 600 15px var(--num); }
+.gen-list li.posted label { color: var(--faint); text-decoration: line-through; }
+.gen-actions { display: flex; justify-content: flex-end; }
 .estimate { margin: 12px 0 0; font-size: 12px; color: var(--faint); line-height: 1.5; }
 .verdict { margin-top: 14px; padding: 10px 12px; border-radius: 8px; font-size: 14px; background: var(--abyss-2); }
 .verdict.good { color: var(--good); }
@@ -252,6 +272,21 @@ td:first-child { text-align: left; white-space: normal; }
   <section class="card shop" id="shop"></section>
   <p class="note" id="note"></p>
 </main>
+
+<dialog class="gen" id="gen" aria-labelledby="gen-title">
+  <div class="gen-body">
+    <div class="gen-head"><h2 id="gen-title">Listing prices</h2><button type="button" class="gen-x" id="gen-close" aria-label="Close">×</button></div>
+    <div class="gen-fields">
+      <label>Kinah bought <input id="gen-amount" inputmode="text" placeholder="100m"></label>
+      <label>Size per listing <input id="gen-size" inputmode="text"></label>
+    </div>
+    <div class="gen-sum" id="gen-sum"></div>
+    <ul class="gen-list" id="gen-list"></ul>
+    <div class="gen-actions">
+      <button type="button" class="btn" id="gen-new">New prices</button>
+    </div>
+  </div>
+</dialog>
 
 <script src="recipes.js"></script>
 <script>
@@ -483,7 +518,8 @@ function renderReceipt(s, items, r) {
       <div class="rmt-total"><dt>Estimated total in USD</dt><dd>≈ ${usd(r.full)} USD</dd></div></dl>` : ""}
     <dl class="facts">${lucky}<div><dt>Buy ${esc(items[state.target])} finished</dt><dd>${buyGoal == null ? (market[items[state.target]] ? "not listed" : "…") : fmt(buyGoal)}</dd></div></dl>
     ${verdict}${trendLine}
-    <p class="estimate">These are estimates from the current cheapest listings. Real costs can differ: listings sell, prices move, and buying many of one item can cost more when few are listed.</p>`;
+    <p class="estimate">These are estimates from the current cheapest listings. Real costs can differ: listings sell, prices move, and buying many of one item can cost more when few are listed.</p>
+    <button type="button" class="link" id="gen-open">Listing price generator</button>`;
 }
 function renderCompare(s, items) {
   const rows = [];
@@ -600,6 +636,85 @@ function applyG2G() {
   info.innerHTML = `Recommended ${seller("recommended")} · Cheapest trusted ${seller("trusted")} · ` +
     `Cheapest ${seller("lowest")} · change over ${state.win} · checked ${ago(g2g.at * 1000)} · ${link}`;
 }
+
+// ---------- listing price generator ----------
+const GEN_MAX = 200, GEN_MIN = 10000;
+// endings must be 100-998 and not all one digit (no 000, 111 ... 999)
+const goodEnding = e => e >= 100 && e % 111 !== 0;
+// Splits total into listings of about `size`, each a whole-thousands base plus its own ending. Endings are added
+// on top and never deducted, so 100M at 10M each is 10 x 10,000,xxx and the listings never total less than the amount.
+function listingPrices(total, size) {
+  const n = Math.max(1, Math.round(total / size));
+  const base = Math.ceil(total / n / 1000) * 1000;
+  const pool = [];
+  for (let e = 100; e < 999; e++) if (goodEnding(e)) pool.push(e);
+  for (let i = 0; i < n; i++) { const j = i + Math.floor(Math.random() * (pool.length - i)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  return pool.slice(0, n).map(e => base + e);
+}
+// accepts 100000000, 100,000,000, 100m or 2.5m
+function parseKinah(text) {
+  const t = String(text).trim().toLowerCase().replace(/,/g, "");
+  const m = t.match(/^(\d+(?:\.\d+)?)m$/);
+  const v = m ? Math.round(parseFloat(m[1]) * 1e6) : parseInt(t.replace(/[^\d]/g, ""), 10);
+  return Number.isFinite(v) ? v : 0;
+}
+const gen = store.get("fl2.gen", { amount: 0, size: 10000000, list: [] }); // list: [{price, posted}]
+const genEl = id => document.getElementById(id);
+const saveGen = () => store.set("fl2.gen", gen);
+function calculatorAmount() {
+  const s = slotData();
+  return Math.round(toBuy(route(s, state.start, state.target, state.owned).full));
+}
+function genProblem() {
+  if (gen.amount < GEN_MIN) return `Enter at least ${fmt(GEN_MIN)} kinah.`;
+  if (gen.size < GEN_MIN) return `Size per listing must be at least ${fmt(GEN_MIN)}.`;
+  if (gen.amount / gen.size > GEN_MAX) return `That's over ${GEN_MAX} listings. Use a bigger size per listing.`;
+  return "";
+}
+function genCreate() {
+  gen.list = genProblem() ? [] : listingPrices(gen.amount, gen.size).map(price => ({ price, posted: false }));
+  saveGen(); genRender();
+}
+function genRender() {
+  genEl("gen-amount").value = gen.amount ? fmt(gen.amount) : "";
+  genEl("gen-size").value = fmt(gen.size);
+  genEl("gen-list").innerHTML = gen.list.map((x, i) => `<li class="${x.posted ? "posted" : ""}">
+    <label><input type="checkbox" data-gen-i="${i}" ${x.posted ? "checked" : ""}>${fmt(x.price)}</label></li>`).join("");
+  const problem = genProblem(), posted = gen.list.filter(x => x.posted).length;
+  const total = gen.list.reduce((a, x) => a + x.price, 0), suggested = calculatorAmount();
+  genEl("gen-sum").innerHTML = problem ? `<span class="bad">${problem}</span>` :
+    `<b>${gen.list.length}</b> listings totalling <b>${fmt(total)}</b>${total > gen.amount ? ` (${fmt(total - gen.amount)} above ${fmt(gen.amount)})` : ""} · <b>${posted}</b> of ${gen.list.length} posted` +
+    (state.tax ? `<br>You receive about <b>${fmt(total * (1 - state.tax / 100))}</b> after ${state.tax}% tax.` : "") +
+    (suggested >= GEN_MIN && suggested !== gen.amount ? `<br><button type="button" class="link" id="gen-use-calc">Use calculator amount: ${fmt(suggested)}</button>` : "");
+  genEl("gen-new").disabled = !gen.list.length;
+}
+// Replacing a batch loses its ticks, so ask first once something is posted
+const genMayReplace = () => !gen.list.some(x => x.posted) || confirm("Replace these prices? Your posted ticks will be lost.");
+function genOpen() {
+  // keep a batch that's being posted; otherwise start from the calculator's number
+  if (!gen.list.some(x => x.posted)) {
+    const suggested = calculatorAmount();
+    if (suggested >= GEN_MIN && suggested !== gen.amount) { gen.amount = suggested; genCreate(); }
+    else if (!gen.list.length && gen.amount) genCreate();
+  }
+  genRender();
+  genEl("gen").showModal();
+}
+document.addEventListener("click", e => {
+  const t = e.target;
+  if (t.id === "gen-open") return genOpen();
+  if (t.id === "gen-close" || t.id === "gen") return genEl("gen").close(); // the dialog itself is only hit on its backdrop
+  if (t.id === "gen-new" && genMayReplace()) return genCreate();
+  if (t.id === "gen-use-calc" && genMayReplace()) { gen.amount = calculatorAmount(); return genCreate(); }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.genI != null) { gen.list[+t.dataset.genI].posted = t.checked; saveGen(); return genRender(); }
+  if (t.id !== "gen-amount" && t.id !== "gen-size") return;
+  if (!genMayReplace()) return genRender();
+  gen[t.id === "gen-amount" ? "amount" : "size"] = parseKinah(t.value);
+  genCreate();
+});
 
 // ---------- events ----------
 const save = () => { store.set("fl2.slot", state.slot); store.set("fl2.start", state.start); store.set("fl2.owned", state.owned); store.set("fl2.target", state.target); };
