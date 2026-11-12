@@ -45,7 +45,9 @@ button, input, select { font: inherit; color: inherit; }
 .num { font-family: var(--num); font-variant-numeric: tabular-nums; }
 
 header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 16px 24px; border-bottom: 1px solid var(--line); }
-.brand { font-family: var(--display); font-size: 21px; margin-right: auto; }
+.brand { font-family: var(--display); font-size: 21px; }
+.nav { margin-right: auto; font-size: 13px; color: var(--muted); }
+.nav:hover { color: var(--path); }
 .chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--muted); background: var(--panel); }
 .chip b { color: var(--text); }
 .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
@@ -218,6 +220,7 @@ td:first-child { text-align: left; white-space: normal; }
 <body>
 <header>
   <div class="brand">Transfer Crafting Calculator</div>
+  <a class="nav" href="profit.html">Craft Profit Finder →</a>
   <span class="chip">Server <b>Siel · NAW</b></span>
   <div class="status" id="status" data-state="idle"><span class="dot"></span><span id="status-text">Waiting</span></div>
   <button class="btn" id="refresh" type="button">Refresh prices</button>
