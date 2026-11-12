@@ -143,6 +143,20 @@ h1 { font: 400 28px/1.15 var(--display); color: var(--unique); margin: 0 0 4px; 
 .detail td.r { text-align: right; font-family: var(--num); white-space: nowrap; padding-left: 12px; }
 .how { font-size: 12px; color: var(--faint); }
 .how.craft { color: var(--path); }
+.tag.gathered { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.tag.src { margin-left: 0; margin-right: 4px; background: color-mix(in srgb, var(--line) 70%, transparent); color: var(--muted); font-size: 10px; }
+.tag.src.gathered, .tag.src.craft { margin-right: 4px; }
+.tag.src.craft { background: color-mix(in srgb, var(--path) 20%, transparent); color: var(--path); }
+.tag.src.shop { background: color-mix(in srgb, var(--unique) 18%, transparent); color: var(--unique); }
+.recipe-head { margin: 10px 0 6px; font-size: 13px; color: var(--muted); }
+.recipe-head b { color: var(--text, inherit); }
+.detail h3 { margin: 14px 0 4px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.sub { margin: 4px 0 0 14px; padding: 0 0 0 10px; border-left: 2px solid color-mix(in srgb, var(--path) 40%, transparent); list-style: none; font-size: 12.5px; }
+.sub li { padding: 2px 0; color: var(--muted); }
+.sub .sub { margin-left: 6px; }
+.shopping td:first-child { width: 60%; }
+details.alt summary { cursor: pointer; list-style: none; text-decoration: underline dotted; }
+details.alt summary::-webkit-details-marker { display: none; }
 .detail input { width: 120px; background: var(--abyss-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-family: var(--num); text-align: right; }
 .detail .sum { display: grid; gap: 4px; margin-top: 10px; }
 .detail .sum div { display: flex; justify-content: space-between; gap: 12px; }
@@ -540,7 +554,7 @@ function typeOf(name, fallback) {
   if (/\(bound\)/i.test(name)) return "bound";
   return fallback;
 }
-const KINDS = [["material", "Crafting materials"], ["consumable", "Consumables & collectibles"], ["gathered", "Gathered resources"], ["", "All crafts"]];
+const KINDS = [["material", "Crafting materials"], ["consumable", "Consumables & collectibles"], ["gathered", "Gatherables (not craftable)"], ["", "All crafts"]];
 
 // ---------- rendering ----------
 const SORTS = {
@@ -569,7 +583,7 @@ function render() {
     ...(state.show === "all" || gathered ? sellOnly : [])]; // items you can only sell go after the crafts
 
   document.getElementById("tally").innerHTML =
-    gathered ? `<span><b>${pool.length}</b> gathered resources on the market, highest price first. You keep the price after ${state.tax}% tax; open one to see what it can be crafted into.</span>` :
+    gathered ? `<span><b>${pool.length}</b> gatherable resources on the market (you collect these, they can't be crafted), highest price first. You keep the price after ${state.tax}% tax; open one to see what it can be crafted into.</span>` :
     `<span class="good"><b>${win.length}</b> profitable</span><span class="bad"><b>${lose.length}</b> losing</span>` +
     (unknown.length ? `<span><b>${unknown.length}</b> missing a material price</span>` : "") +
     `<span><b>${pool.filter(x => !x.sellOnly).length}</b> sellable recipes</span>` +
@@ -609,18 +623,52 @@ function gatheredHtml(x) {
   let detail = "";
   if (open.has(x.name)) {
     const crafts = evaluate.cache.filter(r => !r.sellOnly && x.uses.includes(r.name) && r.profit != null).sort(SORTS.profit).slice(0, 8);
-    detail = `<div class="detail">${crafts.length ? `<p class="how">Recipes that use it, by profit (they value it at its market price):</p><ul class="uses">${crafts.map(r =>
+    const intro = x.kind === "gathered"
+      ? `<p class="recipe-head"><b>Gatherable.</b> You can't craft this; you collect it from gathering nodes in the open world, then sell it or use it in a recipe. Farming it costs only time, so the price after tax is all profit.</p>`
+      : `<p class="recipe-head"><b>Not craftable.</b> It comes from drops, quests or chests, not a recipe, so you can only sell it or use it.</p>`;
+    detail = `<div class="detail">${intro}${crafts.length ? `<p class="how">Recipes that use it, by profit (they value it at its market price):</p><ul class="uses">${crafts.map(r =>
       `<li><span>${esc(r.name)} <span class="how">×${r.r.mats[x.name]}</span></span><b class="num profit ${r.profit > 0 ? "good" : "bad"}">${r.profit > 0 ? "+" : ""}${fmt(r.profit)}</b></li>`).join("")}</ul>`
       : `<p class="how">No sellable recipe uses it, so selling it is the way to earn from it.</p>`}</div>`;
   }
   return `<details class="row" data-name="${esc(x.name)}" ${open.has(x.name) ? "open" : ""}>
     <summary>
-      <div class="what"><b>${esc(x.name)}</b><span class="meta">${esc(meta)}</span></div>
+      <div class="what"><b>${esc(x.name)}</b>${x.kind === "gathered" ? `<span class="tag gathered">Gatherable</span>` : `<span class="tag src">Not craftable</span>`}<span class="meta">${esc(meta)}</span></div>
       <div class="col"><small>Sells for</small>${fmt(x.sell)}</div>
-      <div class="col"><small>Cost</small>${x.kind === "gathered" ? "gathered" : "no recipe"}</div>
+      <div class="col"><small>Cost</small>${x.kind === "gathered" ? "free (gather it)" : "no recipe"}</div>
       <div class="col profit good"><small>You keep</small>${fmt(x.revenue)}</div>
     </summary>${detail}
   </details>`;
+}
+// where a material comes from, for the recipe breakdown
+function srcOf(name) {
+  if (state.overrides[name] == null && SHOP[name] != null) return ["shop", "Shop"];
+  if (/\(bound\)/i.test(name)) return ["shop", "Shop (bound)"];
+  const k = typeOf(name, "");
+  if (k === "gathered") return ["gathered", "Gathered"];
+  if (variants.has(name)) return ["craft", "Craftable"];
+  return ["", market[name]?.found ? "Market" : "Drop / other"];
+}
+const srcTag = n => { const [c, t] = srcOf(n); return `<span class="tag src ${c}">${t}</span>`; };
+const qty = n => Number.isInteger(n) ? fmt(n) : n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+// an ingredient's own recipe (one craft of it), down to things you buy or gather
+function subTree(r, depth = 0) {
+  if (depth > 5) return "";
+  const head = `<li class="how">${esc(r.profession)}${r.mastery != null ? ` ${r.mastery}` : ""} · one craft makes ${r.yield}:</li>`;
+  return `<ul class="sub">${head}${Object.entries(r.mats).map(([m, q]) => {
+    const u = unitCost(m);
+    const price = u.cost == null ? "no price" : `${fmt(u.cost)} each = ${fmt(u.cost * q)}`;
+    const deeper = u.how === "craft" ? subTree(u.recipe, depth + 1) : "";
+    return `<li>${srcTag(m)}${esc(m)} ×${fmt(q)} <span class="how">${u.how === "craft" ? "craft it, " : ""}${price}</span>${deeper}</li>`;
+  }).join("")}</ul>`;
+}
+// flat list of everything you buy or gather for one craft, following the cheapest path
+function baseMats(r, mult, acc = new Map(), depth = 0) {
+  for (const [m, q] of Object.entries(r.mats)) {
+    const u = unitCost(m), need = q * mult;
+    if (u.how === "craft" && depth < 6) baseMats(u.recipe, need / u.recipe.yield, acc, depth + 1);
+    else acc.set(m, (acc.get(m) || 0) + need);
+  }
+  return acc;
 }
 function detailHtml(x) {
   const lines = x.lines.map(l => {
@@ -628,11 +676,22 @@ function detailHtml(x) {
       : l.how === "buy" ? `<span class="how">${state.overrides[l.name] != null ? "your price" : SHOP[l.name] != null ? "shop" : "market"} ${fmt(l.cost)} each</span>`
       : `<span class="how missing">no price</span>`;
     const input = l.how !== "craft" ? `<input data-price="${esc(l.name)}" inputmode="numeric" placeholder="price" value="${state.overrides[l.name] != null ? fmt(state.overrides[l.name]) : ""}" aria-label="Your price for ${esc(l.name)}">` : "";
-    return `<tr><td>${esc(l.name)} ×${l.qty}<br>${how}</td><td class="r">${l.cost == null ? "—" : fmt(l.cost * l.qty)}</td><td class="r">${input}</td></tr>`;
+    // crafted ingredient: show its recipe; bought one that could be crafted: say so
+    const own = l.how === "craft" ? l.recipe : variants.get(l.name)?.[0];
+    const alt = !own ? "" : l.how === "craft" ? subTree(own)
+      : `<details class="alt"><summary class="how">Buying is cheaper. How to craft it anyway</summary>${subTree(own)}</details>`;
+    return `<tr><td>${srcTag(l.name)}${esc(l.name)} ×${l.qty}<br>${how}${alt}</td><td class="r">${l.cost == null ? "—" : fmt(l.cost * l.qty)}</td><td class="r">${input}</td></tr>`;
   }).join("");
+  const nested = x.lines.some(l => l.how === "craft");
+  const base = nested ? [...baseMats(x.r, 1)].map(([m, q]) => { const c = unitCost(m).cost;
+    return `<tr><td>${srcTag(m)}${esc(m)} ×${qty(q)}</td><td class="r">${c == null ? "—" : fmt(c)} each</td><td class="r">${c == null ? "no price" : fmt(c * q)}</td></tr>`; }).join("") : "";
+  const r = x.r;
+  const head = `<p class="recipe-head">How to craft: <b>${esc(r.profession)}</b>${r.mastery != null ? `, mastery ${r.mastery}` : ""}${r.grade ? ` · ${esc(r.grade)}` : ""} · one craft makes <b>${r.yield}</b> ${esc(x.name)}</p>`;
   const keep = 1 - state.tax / 100;
   const bonus = x.bonus.map(p => `<div><dt>${Math.round(p.chance * 100)}% chance it comes out ${esc(p.name)}</dt><dd>${p.price == null ? "not listed" : fmt(p.price)}</dd></div>`).join("");
   return `<div class="detail">
+    ${head}
+    <h3>Materials per craft</h3>
     <table>${lines}${state.fee ? `<tr><td>Craft fee</td><td class="r">${fmt(state.fee)}</td><td></td></tr>` : ""}</table>
     <dl class="sum">
       ${bonus}
@@ -641,6 +700,8 @@ function detailHtml(x) {
       <div><dt>Materials${state.fee ? " and fee" : ""}</dt><dd>${x.missing.length ? `<span class="missing">needs ${x.missing.length} price${x.missing.length > 1 ? "s" : ""}</span>` : fmt(x.cost)}</dd></div>
       <div><dt>Profit per craft</dt><dd class="profit ${x.profit == null ? "unk" : x.profit > 0 ? "good" : "bad"}">${x.profit == null ? "—" : fmt(x.profit)}</dd></div>
     </dl>
+    ${base ? `<h3>Shopping list: base materials for one craft</h3><table class="shopping">${base}</table>
+      <p class="how">Crafted ingredients are broken down to what you buy or gather. Part amounts mean one ingredient craft covers several of these crafts. Gathered ones are free if you farm them yourself.</p>` : ""}
     ${x.missing.length ? `<p class="how missing">Type a price for ${x.missing.map(esc).join(", ")} to finish this one. Bound items can't be bought on the market, so use what the NPC charges.</p>` : ""}
   </div>`;
 }
