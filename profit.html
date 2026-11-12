@@ -215,7 +215,7 @@ body.locked header, body.locked main { visibility: hidden; }
     </div>
     <section class="card advice" aria-labelledby="npc-title">
       <h2 id="npc-title">Shop prices for bound items</h2>
-      <p class="how">Items marked (Bound) come from an NPC shop, not the market, so the page can't look them up. Type what the shop charges once and every recipe that uses them gets a profit.</p>
+      <p class="how">Items marked (Bound) come from the in-game shop, not the market. Most prices are already filled in from aion2hub's shop list (shown greyed). Type a price only to fix one or to add a missing one, like Sugar.</p>
       <ul class="advice-list npc" id="npc"></ul>
     </section>
     <section class="card advice" aria-labelledby="bag-title">
@@ -347,8 +347,19 @@ const usable = name => variants.get(name) || [];
 const allNames = [...new Set([...C.recipes.flatMap(r => [r.name, ...Object.keys(r.mats)]), ...C.procs.map(p => p.name)])];
 
 // ---------- prices ----------
+// Kinah prices of bound crafting supplies from the in-game shop (aion2hub.com/tools/shop, 2026-11-12). Typed prices win.
+const SHOP = {
+  "Salt (Bound)": 220, "Cheese (Bound)": 440, "Curry Powder (Bound)": 440, "Soy Sauce (Bound)": 440,
+  "Abex Butter (Bound)": 880, "Altgard Pepper (Bound)": 880, "Verteron Pepper (Bound)": 880, "Raw Triora Noodles (Bound)": 880, "Ulmus Oil (Bound)": 880,
+  "Zircon Hammer (Bound)": 4650, "Lazuli Hammer (Bound)": 5600, "Moonstone Hammer (Bound)": 6550, "Elatrite Hammer (Bound)": 7450,
+  "Lesser Dragon Leather Softener (Bound)": 4650, "Intermediate Dragon Leather Softener (Bound)": 5600, "Superior Dragon Leather Softener (Bound)": 6550, "Ultimate Dragon Leather Softener (Bound)": 7450,
+  "Lesser Dragon Scale Hardener (Bound)": 4650, "Intermediate Dragon Scale Hardener (Bound)": 5600, "Superior Dragon Scale Hardener (Bound)": 6550, "Ultimate Dragon Scale Hardener (Bound)": 7450,
+  "Orichalcum Solvent (Bound)": 400, "Abrasive (Bound)": 400, "Catalyst (Bound)": 400, "Sandpaper (Bound)": 400,
+  "Glass Bottle (Bound)": 400, "Professional Glass Bottle (Bound)": 1200, "Professional Ink (Bound)": 1200, "Exceptional Ink (Bound)": 10000,
+};
 function priceOf(name) {
   if (state.overrides[name] != null) return state.overrides[name];
+  if (SHOP[name] != null) return SHOP[name];
   const m = market[name];
   return m && m.found ? m.price : null;
 }
@@ -614,7 +625,7 @@ function gatheredHtml(x) {
 function detailHtml(x) {
   const lines = x.lines.map(l => {
     const how = l.how === "craft" ? `<span class="how craft">cheaper to craft (${fmt(l.cost)} each)</span>`
-      : l.how === "buy" ? `<span class="how">${state.overrides[l.name] != null ? "your price" : "market"} ${fmt(l.cost)} each</span>`
+      : l.how === "buy" ? `<span class="how">${state.overrides[l.name] != null ? "your price" : SHOP[l.name] != null ? "shop" : "market"} ${fmt(l.cost)} each</span>`
       : `<span class="how missing">no price</span>`;
     const input = l.how !== "craft" ? `<input data-price="${esc(l.name)}" inputmode="numeric" placeholder="price" value="${state.overrides[l.name] != null ? fmt(state.overrides[l.name]) : ""}" aria-label="Your price for ${esc(l.name)}">` : "";
     return `<tr><td>${esc(l.name)} ×${l.qty}<br>${how}</td><td class="r">${l.cost == null ? "—" : fmt(l.cost * l.qty)}</td><td class="r">${input}</td></tr>`;
@@ -730,10 +741,11 @@ function renderAdvice() {
   // bound shop items used by material and consumable recipes, most-used first
   const npcUse = new Map();
   for (const r of C.recipes) if (r.kind !== "gear") for (const m of Object.keys(r.mats)) if (/\(bound\)/i.test(m) && !variants.has(m)) npcUse.set(m, (npcUse.get(m) || 0) + 1);
-  const npc = [...npcUse.keys()].sort((a, b) => (state.overrides[a] != null) - (state.overrides[b] != null) || npcUse.get(b) - npcUse.get(a) || a.localeCompare(b));
+  const priced = n => state.overrides[n] != null || SHOP[n] != null;
+  const npc = [...npcUse.keys()].sort((a, b) => priced(a) - priced(b) || npcUse.get(b) - npcUse.get(a) || a.localeCompare(b));
   const npcEl = document.getElementById("npc");
   if (!npcEl.contains(document.activeElement)) npcEl.innerHTML = npc.map(n => `<li><span>${esc(n)} <span class="how">used in ${npcUse.get(n)} recipe${npcUse.get(n) > 1 ? "s" : ""}</span></span>
-    <input data-price="${esc(n)}" inputmode="numeric" placeholder="shop price" value="${state.overrides[n] != null ? fmt(state.overrides[n]) : ""}" aria-label="Shop price for ${esc(n)}"></li>`).join("");
+    <input data-price="${esc(n)}" inputmode="numeric" placeholder="${SHOP[n] != null ? fmt(SHOP[n]) : "shop price"}" value="${state.overrides[n] != null ? fmt(state.overrides[n]) : ""}" aria-label="Shop price for ${esc(n)}"></li>`).join("");
   const bagNames = Object.keys(bag);
   document.getElementById("bag").innerHTML = bagNames.length ? bagNames.map(n => {
     const a = bagAdvice(n, bag[n]);
