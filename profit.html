@@ -41,6 +41,11 @@ header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding
 .nav:hover { color: var(--path); }
 .chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--muted); background: var(--panel); }
 .chip b { color: var(--text); }
+.chip.server { display: inline-flex; align-items: center; gap: 6px; }
+.chip.server select { background: transparent; border: 0; color: var(--text); font: 600 13px var(--body); cursor: pointer; padding: 0; max-width: 230px; }
+.chip.server select:focus-visible { outline: 2px solid var(--path); outline-offset: 2px; border-radius: 4px; }
+.chip.server option, .chip.server optgroup { background: var(--panel); color: var(--text); }
+
 .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
 .status[data-state="live"] .dot { background: var(--good); box-shadow: 0 0 8px var(--good); }
@@ -206,7 +211,7 @@ body.locked header, body.locked main { visibility: hidden; }
 <header>
   <div class="brand">Craft Profit Finder</div>
   <a class="nav" href="planner.html">← Transfer Crafting Calculator</a>
-  <span class="chip">Server <b>Siel · NAW</b></span>
+  <label class="chip server">Server <select id="server" aria-label="Market server"></select></label>
   <div class="status" id="status" data-state="idle"><span class="dot"></span><span id="status-text">Waiting</span></div>
   <button class="btn" id="refresh" type="button">Refresh prices</button>
 </header>
@@ -221,7 +226,7 @@ body.locked header, body.locked main { visibility: hidden; }
 
   <section id="view-advice" hidden>
     <h1>What to do right now</h1>
-    <p class="sub">Suggestions from the whole Siel market, refreshed while this page is open. Add what's in your bag to get sell advice for it.</p>
+    <p class="sub">Suggestions from the whole <span class="srv">Siel</span> market, refreshed while this page is open. Add what's in your bag to get sell advice for it.</p>
     <div class="card watch">
       <label class="check"><input type="checkbox" id="watch"> Watch the market: refresh every 5 minutes and point out new chances</label>
       <button type="button" class="link" id="notify">Also alert me with a notification</button>
@@ -249,12 +254,12 @@ body.locked header, body.locked main { visibility: hidden; }
       <section class="card advice"><h2>Sell now if you have it</h2><p class="how">Materials and consumables up sharply this week.</p><ul class="advice-list" id="adv-spike"></ul></section>
       <section class="card advice"><h2>Sell raw, don't craft</h2><p class="how">Materials worth more sold than used in any recipe that profits.</p><ul class="advice-list" id="adv-raw"></ul></section>
     </div>
-    <p class="note">Advice is a starting point, not a promise: prices come from the cheapest listing right now and drops don't always recover. Siel doesn't report sales, so check listings before buying a lot.</p>
+    <p class="note">Advice is a starting point, not a promise: prices come from the cheapest listing right now and drops don't always recover. If the market shows no sales for <span class="srv">Siel</span>, check listings before buying a lot.</p>
   </section>
 
   <section id="view-flip" hidden>
     <h1>Buy low, sell high</h1>
-    <p class="sub">Every material and consumable on the Siel market, checked for price dips you can buy into, prices that jumped, and markets with so few sellers you can list high.</p>
+    <p class="sub">Every material and consumable on the <span class="srv">Siel</span> market, checked for price dips you can buy into, prices that jumped, and markets with so few sellers you can list high.</p>
     <details class="card rules">
       <summary>How to flip without losing kinah</summary>
       <ul>
@@ -264,7 +269,7 @@ body.locked header, body.locked main { visibility: hidden; }
         <li><b>Busy markets, undercut by 1.</b> With lots of listings, only the cheapest sells first.</li>
         <li><b>Sell into spikes.</b> If something you hold jumped well above its weekly price, list it before sellers catch up.</li>
         <li><b>Don't sink everything into one item.</b> Spread kinah over several flips and buy only what you could resell within a few days.</li>
-        <li><b>Sales aren't reported for Siel.</b> The listing count is the best hint of how busy an item is.</li>
+        <li><b>Sales may not be reported for <span class="srv">Siel</span>.</b> The listing count is the best hint of how busy an item is.</li>
       </ul>
     </details>
     <section class="card filters flip-filters" aria-label="Flip filters">
@@ -290,7 +295,7 @@ body.locked header, body.locked main { visibility: hidden; }
 
   <section id="view-craft">
   <h1>Which materials are worth crafting?</h1>
-  <p class="sub">Crafting materials and consumables that sell on Siel, like Balaur leather, horns and scales, ranked by profit per craft at today's lowest listings. Gear isn't included.</p>
+  <p class="sub">Crafting materials and consumables that sell on <span class="srv">Siel</span>, like Balaur leather, horns and scales, ranked by profit per craft at today's lowest listings. Gear isn't included.</p>
 
   <section class="card filters" aria-label="Filters">
     <label class="field wide"><span>Search</span><input id="q" type="search" placeholder="Optional: filter by item or material"></label>
@@ -322,8 +327,10 @@ body.locked header, body.locked main { visibility: hidden; }
 </main>
 
 <script src="crafts.js"></script>
+<script src="servers.js"></script>
 <script>
-const SERVER = 11201; // Siel (NAW)
+const SRV = window.SERVERS, SERVER = SRV.current.id; // picked in the header, Siel NA West by default
+SRV.mountPicker(document.getElementById("server"));
 const API = location.protocol.startsWith("http") ? "/api" : "https://aion2.exchange/api";
 const WIN = "24h";
 const PAGE = 50; // items per request when loading the whole market (about 1,000 items in all)
@@ -341,10 +348,10 @@ const store = {
 const state = {
   q: "", kind: store.get("cp.kind2", "material"), prof: store.get("cp.prof", ""), show: store.get("cp.show", "all"), sort: store.get("cp.sort", "profit"),
   fee: store.get("cp.fee", 0), tax: store.get("cp.tax", 10), soldOnly: store.get("cp.soldOnly", false),
-  overrides: store.get("fl.overrides", {}), // shared with the calculator: prices you typed in yourself
+  overrides: SRV.loadOverrides(), // shared with the calculator: prices you typed in yourself (bound shop prices on every server)
   limit: STEP,
 };
-const market = store.get("fl.market", {}); // shared with the calculator: name -> {found, price, listings, sold, at, trend}
+const market = store.get(SRV.key("fl.market"), {}); // shared with the calculator: name -> {found, price, listings, sold, at, trend}
 const open = new Set();
 
 const fmt = n => (n == null ? "—" : Math.round(n).toLocaleString("en-US"));
@@ -386,7 +393,7 @@ function record(name, it, win = WIN) {
   };
 }
 const fresh = n => market[n] && Date.now() - market[n].at < CACHE_MS && market[n].trend?.[WIN] && market[n].trend?.["7d"];
-function saveMarket() { store.set("fl.market", market); }
+function saveMarket() { store.set(SRV.key("fl.market"), market); }
 
 // The whole market a page at a time, so one load prices every recipe. Throws if the API won't list without a search.
 async function loadAll(force, token, win = WIN) {
@@ -774,7 +781,7 @@ function flipHtml(x) {
 }
 // ---------- advisor ----------
 const bag = store.get("cp.bag", {}); // name -> {qty, paid}
-const watch = { on: store.get("cp.watch", false), notify: store.get("cp.notify", false), seen: new Set(store.get("cp.seen", [])), fresh: new Set(), timer: null };
+const watch = { on: store.get("cp.watch", false), notify: store.get("cp.notify", false), seen: new Set(store.get(SRV.key("cp.seen"), [])), fresh: new Set(), timer: null };
 const WATCH_MS = 5 * 60 * 1000;
 const TOP = 6;
 const isTrade = m => /material|consum|collect/i.test(`${m?.section || ""} ${m?.category || ""}`);
@@ -851,7 +858,7 @@ function noticeChanges() {
   for (const n of Object.keys(bag)) if (bagAdvice(n, bag[n]).tag === "sell") now.add(`bag:${n}`);
   const added = [...now].filter(n => !watch.seen.has(n));
   watch.fresh = new Set(added.map(n => n.replace(/^bag:/, "")));
-  watch.seen = now; store.set("cp.seen", [...now]);
+  watch.seen = now; store.set(SRV.key("cp.seen"), [...now]);
   if (watch.on && watch.notify && added.length && "Notification" in window && Notification.permission === "granted") {
     const names = added.map(n => n.replace(/^bag:/, ""));
     new Notification("AION 2 market: new chances", { body: `${names.slice(0, 4).join(", ")}${names.length > 4 ? ` and ${names.length - 4} more` : ""}` });
@@ -883,7 +890,7 @@ document.getElementById("npc").addEventListener("change", e => {
   const v = parseNum(e.target.value);
   if (v == null || v < 0) delete state.overrides[name]; else state.overrides[name] = v;
   e.target.value = v == null ? "" : fmt(v);
-  store.set("fl.overrides", state.overrides);
+  SRV.saveOverrides(state.overrides);
   e.target.blur(); render();
 });
 document.getElementById("bag").addEventListener("click", e => {
@@ -960,7 +967,7 @@ document.getElementById("rows").addEventListener("change", e => {
   const name = e.target.dataset?.price; if (name == null) return;
   const v = parseNum(e.target.value);
   if (v == null || v <= 0) delete state.overrides[name]; else state.overrides[name] = v;
-  store.set("fl.overrides", state.overrides);
+  SRV.saveOverrides(state.overrides);
   render();
 });
 

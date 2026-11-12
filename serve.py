@@ -12,6 +12,7 @@ import webbrowser
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, quote, urlparse
 
 PORT = int(os.environ.get("PORT", 8765))
 UPSTREAM = os.environ.get("AION2_UPSTREAM", "https://aion2.exchange")
@@ -19,15 +20,17 @@ CACHE_SECONDS = 600  # G2G
 API_CACHE_SECONDS = 180  # market listings sell fast
 _cache = {}
 
-# G2G listing for AION 2 kinah, Siel - Elyos [NA West] (price is USD per 1M kinah)
+# G2G listing for AION 2 kinah on one server (price is USD per 1M kinah); servers.json maps each server to its listing
 G2G_SEARCH = os.environ.get("G2G_SEARCH", (
-    "https://sls.g2g.com/v3/offer/search?region_id=dfced32f-2f0a-4df5-a218-1e068cfadffa"
-    "&filter_attr=lgc_37781_dropdown_11:lgc_37781_dropdown_11_64650&sort={sort}"
+    "https://sls.g2g.com/v3/offer/search?region_id={region}&filter_attr={attr}&sort={sort}"
     "&seo_term=aion-2-kinah&page_size=20&group=0&currency=USD&country=US&v=v2"))
+SERVERS = json.loads((Path(__file__).parent / "servers.json").read_text(encoding="utf-8"))
+SERVER_BY_ID = {s["id"]: s for s in SERVERS["servers"] if s.get("g2g")}
 
 
-def g2g_offers(sort):
-    req = urllib.request.Request(G2G_SEARCH.format(sort=sort), headers={"User-Agent": "Mozilla/5.0 (personal price check)"})
+def g2g_offers(server, sort):
+    url = G2G_SEARCH.format(region=server["g2g"]["region"], attr=quote(server["g2g"]["attr"]), sort=sort)
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (personal price check)"})
     with urllib.request.urlopen(req, timeout=20) as r:
         results = json.load(r).get("payload", {}).get("results", [])
     return [{"seller": o.get("username"), "price": o.get("converted_unit_price") or o.get("unit_price"),
@@ -36,7 +39,8 @@ def g2g_offers(sort):
 
 
 # G2G has no price history, so keep our own (same shape as the Netlify version): 8 days, about 2 an hour
-HISTORY_FILE = Path(__file__).parent / "g2g_history.json"
+def history_file(server):  # Siel NA West keeps its original file
+    return Path(__file__).parent / ("g2g_history.json" if server["id"] == 11201 else f"g2g_history_{server['id']}.json")
 HISTORY_KEEP = 8 * 86400
 HISTORY_GAP = 25 * 60
 _history_lock = threading.Lock()
@@ -46,10 +50,10 @@ def trusted(o):
     return (o.get("satisfaction") or 0) >= 0.95 and (o.get("orders") or 0) >= 20
 
 
-def record_snapshot(rate):
+def record_snapshot(server, rate):
     with _history_lock:
         try:
-            history = json.loads(HISTORY_FILE.read_text())
+            history = json.loads(history_file(server).read_text())
         except (OSError, ValueError):
             history = []
         if not history or rate["at"] - history[-1]["at"] >= HISTORY_GAP:
@@ -58,21 +62,26 @@ def record_snapshot(rate):
                             "trusted": next((o["price"] for o in rate["lowest"] if trusted(o)), None),
                             "lowest": rate["lowest"][0]["price"] if rate["lowest"] else None})
             history = [h for h in history if rate["at"] - h["at"] <= HISTORY_KEEP]
-            HISTORY_FILE.write_text(json.dumps(history))
+            history_file(server).write_text(json.dumps(history))
         return history
 
 
-def g2g_rate():
+def g2g_rate(server):
     """G2G's own ranking (recommended) and the cheapest offers, both in G2G's order, plus recorded history."""
-    rate = {"recommended": g2g_offers("recommended_v4"), "lowest": g2g_offers("lowest_price"), "at": int(time.time())}
-    rate["history"] = record_snapshot(rate)
+    rate = {"server": server["id"], "recommended": g2g_offers(server, "recommended_v4"), "lowest": g2g_offers(server, "lowest_price"),
+            "at": int(time.time())}
+    rate["history"] = record_snapshot(server, rate)
     return json.dumps(rate).encode()
 
 
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
-        if self.path == "/g2g/rate":
-            return self._cached("/g2g/rate", g2g_rate)
+        if urlparse(self.path).path == "/g2g/rate":
+            sid = parse_qs(urlparse(self.path).query).get("server", [SERVERS["default"]])[0]
+            server = SERVER_BY_ID.get(int(sid)) if str(sid).isdigit() else None
+            if not server:
+                return self._send(400, b'{"error": "unknown server"}')
+            return self._cached(f"/g2g/rate?server={server['id']}", lambda: g2g_rate(server))
         if not self.path.startswith("/api/"):
             return super().do_GET()
         self._cached(self.path, self._upstream, API_CACHE_SECONDS)

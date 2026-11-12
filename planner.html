@@ -50,6 +50,11 @@ header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding
 .nav:hover { color: var(--path); }
 .chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--muted); background: var(--panel); }
 .chip b { color: var(--text); }
+.chip.server { display: inline-flex; align-items: center; gap: 6px; }
+.chip.server select { background: transparent; border: 0; color: var(--text); font: 600 13px var(--body); cursor: pointer; padding: 0; max-width: 230px; }
+.chip.server select:focus-visible { outline: 2px solid var(--path); outline-offset: 2px; border-radius: 4px; }
+.chip.server option, .chip.server optgroup { background: var(--panel); color: var(--text); }
+
 .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
 .status[data-state="live"] .dot { background: var(--good); box-shadow: 0 0 8px var(--good); }
@@ -221,7 +226,7 @@ td:first-child { text-align: left; white-space: normal; }
 <header>
   <div class="brand">Transfer Crafting Calculator</div>
   <a class="nav" href="profit.html">Craft Profit Finder →</a>
-  <span class="chip">Server <b>Siel · NAW</b></span>
+  <label class="chip server">Server <select id="server" aria-label="Market server"></select></label>
   <div class="status" id="status" data-state="idle"><span class="dot"></span><span id="status-text">Waiting</span></div>
   <button class="btn" id="refresh" type="button">Refresh prices</button>
 </header>
@@ -292,8 +297,10 @@ td:first-child { text-align: left; white-space: normal; }
 </dialog>
 
 <script src="recipes.js"></script>
+<script src="servers.js"></script>
 <script>
-const SERVER = 11201; // Siel (NAW)
+const SRV = window.SERVERS, SERVER = SRV.current.id; // picked in the header, Siel NA West by default
+SRV.mountPicker(document.getElementById("server"));
 const API = location.protocol.startsWith("http") ? "/api" : "https://aion2.exchange/api";
 const GREAT_SUCCESS = 0.25; // crafting True/White/Wise has a 25% chance to come out Splendent, skipping the next step
 const CACHE_MS = 5 * 60 * 1000; // listings sell fast, so don't trust a saved price for long
@@ -310,7 +317,7 @@ const state = {
   start: store.get("fl2.start", 1),     // tier you start with: 0 Artisan's base, 1 True ... 5 Wise
   owned: store.get("fl2.owned", false), // true = you already have the start item
   target: store.get("fl2.target", 6),   // 2, 4 or 6
-  overrides: store.get("fl.overrides", {}),
+  overrides: SRV.loadOverrides(), // bound shop prices are shared by every server, the rest are this server's
   tax: store.get("fl2.tax", 10), // market tax % lost when RMT kinah is handed over through the market
   usdPerMil: store.get("fl2.usdPerMil", 0.8212), // RMT value of 1,000,000 kinah
   g2gFee: store.get("fl2.g2gFee", 3.99), // G2G handling fee %, paid on top of the listed USD price
@@ -318,7 +325,7 @@ const state = {
   win: store.get("fl2.win", "24h"), // price-change period: 1h | 6h | 24h | 7d
 };
 const WINDOWS = ["1h", "6h", "24h", "7d"]; // periods aion2.exchange accepts
-const market = store.get("fl.market", {}); // name -> {found, price, listings, at, trend: {period: {pct, basis, at}}}
+const market = store.get(SRV.key("fl.market"), {}); // name -> {found, price, listings, at, trend: {period: {pct, basis, at}}}
 const inflight = new Map();
 
 // ---------- data helpers ----------
@@ -398,7 +405,7 @@ async function lookup(name, force = false) {
     const trend = { ...(market[name]?.trend || {}), [win]: { pct: it?.change_pct ?? null, basis: it?.change_basis_seconds ?? null, at: Date.now() } };
     const rec = { found: !!it && it.listed !== false && price != null, price, listings: it ? it.listings ?? pick(it, ["listing"]) : null, at: Date.now(), trend };
     market[name] = rec;
-    store.set("fl.market", market);
+    store.set(SRV.key("fl.market"), market);
     return rec;
   })().finally(() => inflight.delete(key));
   inflight.set(key, p);
@@ -585,16 +592,16 @@ function render() {
   renderCompare(s, items);
   renderSteps(s, items);
   document.getElementById("note").innerHTML =
-    `Prices are the cheapest listing on Siel (NAW). USD amounts include the kinah lost to market tax on delivery and the G2G handling fee. ▲ red means a price went up over the chosen period, ▼ green means it went down. Buying many of one material can cost more when few are listed (red numbers). Crafting fees and failed crafts aren't included. A failed craft loses the materials but keeps your gear. Recipes: ${esc(D.source)}.`;
+    `Prices are the cheapest listing on ${esc(SRV.label())}. USD amounts include the kinah lost to market tax on delivery and the G2G handling fee. ▲ red means a price went up over the chosen period, ▼ green means it went down. Buying many of one material can cost more when few are listed (red numbers). Crafting fees and failed crafts aren't included. A failed craft loses the materials but keeps your gear. Recipes: ${esc(D.source)}.`;
 }
 
 // ---------- RMT value from G2G ----------
-const G2G_URL = "https://www.g2g.com/categories/aion-2-kinah/offer/group?fa=lgc_37781_dropdown_11%3Algc_37781_dropdown_11_64650&region_id=dfced32f-2f0a-4df5-a218-1e068cfadffa&sort=lowest_price";
+const G2G_URL = SRV.g2gUrl(); // this server's kinah listing
 let g2g = null, g2gError = null;
 async function loadG2G() {
   if (!location.protocol.startsWith("http")) { g2gError = "start the page with python serve.py"; return applyG2G(); }
   try {
-    const res = await fetch("/g2g/rate");
+    const res = await fetch(`/g2g/rate?server=${SERVER}`);
     if (res.status === 404) throw new Error("serve.py is an old version, stop it with Ctrl+C and run python serve.py again");
     const data = await res.json();
     if (!res.ok || !data.lowest) throw new Error(data.error || `HTTP ${res.status}`);
@@ -627,7 +634,7 @@ function g2gTrend(mode) {
 }
 function applyG2G() {
   const input = document.getElementById("usd-rate"), info = document.getElementById("g2g-info");
-  const link = `<a href="${G2G_URL}" target="_blank" rel="noopener">Siel Elyos on G2G</a>`;
+  const link = `<a href="${G2G_URL}" target="_blank" rel="noopener">${esc(SRV.current.name)} ${esc(SRV.current.faction)} [${esc(SRV.current.region)}] on G2G</a>`;
   const pickNow = g2gPick(state.rateMode);
   input.disabled = state.rateMode !== "manual" && !!pickNow;
   if (pickNow) { state.usdPerMil = pickNow.price; input.value = pickNow.price; }
@@ -750,7 +757,7 @@ document.addEventListener("change", e => {
   if (t.classList.contains("price-in")) {
     const v = parseInt(t.value.replace(/[^\d]/g, ""), 10);
     if (Number.isFinite(v)) state.overrides[t.dataset.name] = v; else delete state.overrides[t.dataset.name];
-    store.set("fl.overrides", state.overrides); render();
+    SRV.saveOverrides(state.overrides); render();
   }
 });
 document.getElementById("refresh").addEventListener("click", () => loadPrices(namesFor(slotData()), true));

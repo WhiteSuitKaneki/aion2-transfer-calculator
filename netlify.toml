@@ -7,3 +7,6 @@
   from = "/"
   to = "/planner.html"
   status = 200
+
+[functions]
+  node_bundler = "esbuild" # bundles servers.json into the G2G functions
