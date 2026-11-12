@@ -1,0 +1,926 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Craft Profit Finder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Figtree:wght@400;500;600;700&family=Chakra+Petch:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --abyss: #0d1424;
+  --abyss-2: #111b30;
+  --panel: #16213a;
+  --panel-2: #1b2846;
+  --line: #273759;
+  --text: #ebe6d8;
+  --muted: #9aa5c2;
+  --faint: #66739a;
+  --unique: #e3b24f;
+  --good: #5fc9a8;
+  --bad: #e8667f;
+  --path: #b79cff;
+  --display: "Marcellus SC", "Palatino Linotype", serif;
+  --body: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --num: "Chakra Petch", "Consolas", monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: radial-gradient(1000px 420px at 50% -8%, color-mix(in srgb, var(--good) 8%, transparent), transparent 70%), var(--abyss);
+  color: var(--text); font: 15px/1.5 var(--body); min-height: 100vh;
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--path); outline-offset: 2px; }
+.num { font-family: var(--num); font-variant-numeric: tabular-nums; }
+
+header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 16px 24px; border-bottom: 1px solid var(--line); }
+.brand { font-family: var(--display); font-size: 21px; }
+.nav { margin-right: auto; font-size: 13px; color: var(--muted); }
+.nav:hover { color: var(--path); }
+.chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--muted); background: var(--panel); }
+.chip b { color: var(--text); }
+.status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.status[data-state="live"] .dot { background: var(--good); box-shadow: 0 0 8px var(--good); }
+.status[data-state="loading"] .dot { background: var(--unique); animation: pulse 1s infinite; }
+.status[data-state="error"] .dot { background: var(--bad); }
+@keyframes pulse { 50% { opacity: .3; } }
+.btn { border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px; padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 600; }
+.btn:hover { border-color: var(--path); }
+
+main { max-width: 1040px; margin: 0 auto; padding: 24px 24px 64px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.warn { padding: 12px 16px; margin-bottom: 16px; border-color: var(--bad); color: var(--bad); font-size: 14px; }
+h1 { font: 400 28px/1.15 var(--display); color: var(--unique); margin: 0 0 4px; }
+.sub { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+
+.filters { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 14px 18px; padding: 16px 20px; margin-bottom: 16px; }
+.field { display: grid; gap: 6px; align-content: start; }
+.field > span { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.field input, .field select { width: 100%; background: var(--abyss-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; }
+.field input:hover, .field select:hover { border-color: var(--path); }
+.field input.n { font-family: var(--num); text-align: right; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--abyss-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
+.seg button { border: 0; background: none; padding: 6px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: color-mix(in srgb, var(--path) 20%, transparent); color: var(--path); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); cursor: pointer; }
+.check input { accent-color: var(--path); width: 16px; height: 16px; }
+
+.views { display: inline-grid; grid-template-columns: repeat(3, 1fr); background: var(--abyss-2); border: 1px solid var(--line); border-radius: 10px; padding: 3px; margin: 0 0 18px; }
+.views button { border: 0; background: none; padding: 8px 18px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--muted); }
+.views button[aria-selected="true"] { background: var(--good); color: #0d1424; }
+.watch { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px; margin-bottom: 16px; }
+.link { padding: 0; border: 0; background: none; font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.link:hover { color: var(--path); }
+.link[hidden] { display: none; }
+.advice { padding: 16px 18px; margin-bottom: 16px; }
+.advice h2 { margin: 0 0 2px; font: 400 19px var(--display); color: var(--unique); }
+.advice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.advice-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.advice-list li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 8px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); font-size: 14px; }
+.advice-list li:last-child { border-bottom: 0; }
+.advice-list .say { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+.advice-list .say b { color: var(--text); }
+.advice-list .val { font: 600 14px var(--num); text-align: right; }
+.advice-list .x { border: 0; background: none; color: var(--faint); cursor: pointer; font-size: 16px; padding: 0 4px; }
+.advice-list .x:hover { color: var(--bad); }
+.tag.new { background: var(--unique); color: #0d1424; }
+.tag.sell { background: color-mix(in srgb, var(--good) 20%, transparent); color: var(--good); }
+.tag.hold { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+.npc li { grid-template-columns: 1fr 140px; align-items: center; }
+.npc input { width: 100%; background: var(--abyss-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-family: var(--num); text-align: right; }
+.bag-add { display: grid; grid-template-columns: 2fr 0.7fr 1.3fr auto; gap: 8px; margin-top: 10px; }
+.bag-add input { width: 100%; background: var(--abyss-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.bag-add input.n { font-family: var(--num); text-align: right; }
+.rules { padding: 0; margin-bottom: 16px; }
+.rules summary { cursor: pointer; padding: 12px 16px; font-weight: 600; color: var(--unique); }
+.rules ul { margin: 0; padding: 0 20px 14px 36px; font-size: 14px; color: var(--muted); display: grid; gap: 6px; }
+.rules b { color: var(--text); }
+.flip-filters { grid-template-columns: 2fr 1.4fr 1fr; }
+.seg.four { grid-template-columns: repeat(4, 1fr); }
+.flip-head, .flip summary { grid-template-columns: 1fr 120px 120px 150px; }
+.tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font: 600 11px var(--body); vertical-align: 2px; }
+.tag.dip { background: color-mix(in srgb, var(--good) 20%, transparent); color: var(--good); }
+.tag.spike { background: color-mix(in srgb, var(--unique) 22%, transparent); color: var(--unique); }
+.tag.thin { background: color-mix(in srgb, var(--path) 22%, transparent); color: var(--path); }
+.kinds { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.kinds button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 14px; color: var(--text); }
+.kinds button:hover { border-color: var(--good); }
+.kinds button span { margin-left: 4px; font: 500 12px var(--num); color: var(--faint); }
+.kinds button[aria-pressed="true"] { background: var(--good); border-color: var(--good); color: #0d1424; font-weight: 600; }
+.kinds button[aria-pressed="true"] span { color: #0d1424; }
+.uses { margin: 8px 0 0; padding: 0; list-style: none; }
+.uses li { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
+.tally { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; color: var(--muted); margin: 0 0 12px; }
+.tally b { font-family: var(--num); }
+.tally .good b { color: var(--good); }
+.tally .bad b { color: var(--bad); }
+
+.rows { display: grid; gap: 8px; }
+.row { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.row[open] { border-color: color-mix(in srgb, var(--path) 50%, var(--line)); }
+.row summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 1fr 120px 120px 130px; gap: 4px 14px; align-items: center; padding: 12px 16px; }
+.row summary::-webkit-details-marker { display: none; }
+.row summary:hover { background: color-mix(in srgb, var(--panel-2) 70%, transparent); border-radius: 10px; }
+.what b { font-weight: 600; }
+.meta { display: block; font-size: 12px; color: var(--faint); }
+.col { text-align: right; font: 600 14px var(--num); }
+.col small { display: block; font: 500 11px var(--body); color: var(--faint); text-transform: uppercase; letter-spacing: .06em; }
+.profit.good { color: var(--good); }
+.profit.bad { color: var(--bad); }
+.profit.unk { color: var(--faint); }
+.pct { display: block; font: 500 12px var(--num); color: var(--muted); }
+.list-head { display: grid; grid-template-columns: 1fr 120px 120px 130px; gap: 14px; padding: 0 17px 4px; font-size: 11px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .08em; }
+.list-head span:not(:first-child) { text-align: right; }
+.list-head button { border: 0; background: none; padding: 0; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.list-head button[aria-pressed="true"] { color: var(--path); }
+
+.detail { padding: 4px 16px 14px; border-top: 1px dashed var(--line); font-size: 14px; }
+.detail table { width: 100%; border-collapse: collapse; }
+.detail td { padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); vertical-align: middle; }
+.detail td.r { text-align: right; font-family: var(--num); white-space: nowrap; padding-left: 12px; }
+.how { font-size: 12px; color: var(--faint); }
+.how.craft { color: var(--path); }
+.detail input { width: 120px; background: var(--abyss-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-family: var(--num); text-align: right; }
+.detail .sum { display: grid; gap: 4px; margin-top: 10px; }
+.detail .sum div { display: flex; justify-content: space-between; gap: 12px; }
+.detail .sum dt { color: var(--muted); }
+.detail .sum dd { margin: 0; font: 600 14px var(--num); }
+.missing { color: var(--bad); }
+.more { display: block; margin: 14px auto 0; }
+.more[hidden] { display: none; }
+.note { font-size: 12px; color: var(--faint); line-height: 1.6; margin-top: 22px; }
+.lock { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 16px; background: var(--abyss); }
+.lock[hidden] { display: none; }
+.lock form { width: min(340px, 100%); display: grid; gap: 12px; padding: 24px; text-align: center; }
+.lock h2 { margin: 0; font: 400 22px var(--display); color: var(--unique); }
+.lock input { background: var(--abyss-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 600 18px var(--num); text-align: center; letter-spacing: .3em; }
+.lock .bad { color: var(--bad); font-size: 13px; min-height: 18px; }
+body.locked header, body.locked main { visibility: hidden; }
+.empty { padding: 24px; text-align: center; color: var(--muted); }
+
+@media (max-width: 760px) {
+  header, main { padding-left: 16px; padding-right: 16px; }
+  .filters { grid-template-columns: 1fr 1fr; padding: 14px 16px; }
+  .filters .wide { grid-column: 1 / -1; }
+  .list-head { display: none; }
+  .flip-filters { grid-template-columns: 1fr; }
+  .advice-grid { grid-template-columns: 1fr; }
+  .bag-add { grid-template-columns: 1fr 1fr; }
+  .bag-add input:first-child { grid-column: 1 / -1; }
+  .views button { padding: 8px 10px; }
+  .flip summary { grid-template-columns: 1fr 1fr 1fr; }
+  .row summary { grid-template-columns: 1fr 1fr 1fr; padding: 12px; }
+  .row summary .what { grid-column: 1 / -1; }
+  .col { text-align: left; }
+  .detail { padding: 4px 12px 12px; }
+  .detail input { width: 100px; }
+}
+</style>
+</head>
+<body class="locked">
+<div class="lock" id="lock">
+  <form class="card" id="lock-form">
+    <h2>Enter code</h2>
+    <input id="lock-code" type="password" inputmode="numeric" autocomplete="off" aria-label="Access code" autofocus>
+    <button class="btn" type="submit">Unlock</button>
+    <span class="bad" id="lock-bad"></span>
+  </form>
+</div>
+<header>
+  <div class="brand">Craft Profit Finder</div>
+  <a class="nav" href="planner.html">← Transfer Crafting Calculator</a>
+  <span class="chip">Server <b>Siel · NAW</b></span>
+  <div class="status" id="status" data-state="idle"><span class="dot"></span><span id="status-text">Waiting</span></div>
+  <button class="btn" id="refresh" type="button">Refresh prices</button>
+</header>
+
+<main>
+  <div class="card warn" id="api-warn" hidden></div>
+  <div class="views" role="tablist" aria-label="View">
+    <button type="button" role="tab" data-view="advice">Advisor</button>
+    <button type="button" role="tab" data-view="craft">Craft profit</button>
+    <button type="button" role="tab" data-view="flip">Flip finder</button>
+  </div>
+
+  <section id="view-advice" hidden>
+    <h1>What to do right now</h1>
+    <p class="sub">Suggestions from the whole Siel market, refreshed while this page is open. Add what's in your bag to get sell advice for it.</p>
+    <div class="card watch">
+      <label class="check"><input type="checkbox" id="watch"> Watch the market: refresh every 5 minutes and point out new chances</label>
+      <button type="button" class="link" id="notify">Also alert me with a notification</button>
+      <span class="how" id="watch-info"></span>
+    </div>
+    <section class="card advice" aria-labelledby="npc-title">
+      <h2 id="npc-title">Shop prices for bound items</h2>
+      <p class="how">Items marked (Bound) come from an NPC shop, not the market, so the page can't look them up. Type what the shop charges once and every recipe that uses them gets a profit.</p>
+      <ul class="advice-list npc" id="npc"></ul>
+    </section>
+    <section class="card advice" aria-labelledby="bag-title">
+      <h2 id="bag-title">My items to sell</h2>
+      <form class="bag-add" id="bag-add">
+        <input id="bag-name" list="item-names" placeholder="Item name" aria-label="Item name" required>
+        <input id="bag-qty" class="n" inputmode="numeric" placeholder="Qty" aria-label="Quantity">
+        <input id="bag-paid" class="n" inputmode="numeric" placeholder="Paid each (optional)" aria-label="Price you paid for each">
+        <button class="btn" type="submit">Add</button>
+      </form>
+      <datalist id="item-names"></datalist>
+      <ul class="advice-list" id="bag"></ul>
+    </section>
+    <div class="advice-grid">
+      <section class="card advice"><h2>Craft and sell</h2><p class="how">Most profit per craft, after tax, buying every material.</p><ul class="advice-list" id="adv-craft"></ul></section>
+      <section class="card advice"><h2>Buy to flip</h2><p class="how">Prices that just dropped, with the price they came from.</p><ul class="advice-list" id="adv-dip"></ul></section>
+      <section class="card advice"><h2>Sell now if you have it</h2><p class="how">Materials and consumables up sharply this week.</p><ul class="advice-list" id="adv-spike"></ul></section>
+      <section class="card advice"><h2>Sell raw, don't craft</h2><p class="how">Materials worth more sold than used in any recipe that profits.</p><ul class="advice-list" id="adv-raw"></ul></section>
+    </div>
+    <p class="note">Advice is a starting point, not a promise: prices come from the cheapest listing right now and drops don't always recover. Siel doesn't report sales, so check listings before buying a lot.</p>
+  </section>
+
+  <section id="view-flip" hidden>
+    <h1>Buy low, sell high</h1>
+    <p class="sub">Every material and consumable on the Siel market, checked for price dips you can buy into, prices that jumped, and markets with so few sellers you can list high.</p>
+    <details class="card rules">
+      <summary>How to flip without losing kinah</summary>
+      <ul>
+        <li><b>Beat the tax.</b> The market keeps <span class="tax-pct">10</span>% of every sale, so you must resell for at least <b class="be-pct">11.1</b>% more than you paid just to break even. "Break-even" on each row is that price.</li>
+        <li><b>Buy dips in things people always need.</b> A sudden drop is usually one seller dumping a stack. Refining stones, Dragon Lord materials and potions come back; something a patch made useless won't.</li>
+        <li><b>Few sellers, set the price.</b> With 8 or fewer listings you don't need to undercut. List at or a little above the cheapest.</li>
+        <li><b>Busy markets, undercut by 1.</b> With lots of listings, only the cheapest sells first.</li>
+        <li><b>Sell into spikes.</b> If something you hold jumped well above its weekly price, list it before sellers catch up.</li>
+        <li><b>Don't sink everything into one item.</b> Spread kinah over several flips and buy only what you could resell within a few days.</li>
+        <li><b>Sales aren't reported for Siel.</b> The listing count is the best hint of how busy an item is.</li>
+      </ul>
+    </details>
+    <section class="card filters flip-filters" aria-label="Flip filters">
+      <label class="field wide"><span>Search</span><input id="fq" type="search" placeholder="Optional: filter by item"></label>
+      <div class="field"><span>Signal</span>
+        <div class="seg four" role="group" aria-label="Which signal to show" id="signal">
+          <button type="button" data-signal="dip">Dips</button>
+          <button type="button" data-signal="spike">Spikes</button>
+          <button type="button" data-signal="thin">Few sellers</button>
+          <button type="button" data-signal="all">All</button>
+        </div>
+      </div>
+      <label class="field"><span>Dip of at least %</span><input id="dip-min" class="n" inputmode="decimal" aria-label="Smallest price drop that counts as a dip"></label>
+    </section>
+    <div class="tally" id="flip-tally"></div>
+    <div class="list-head flip-head">
+      <span>Item</span><span>Cheapest</span><span>Break-even</span><span>Target · profit each</span>
+    </div>
+    <div class="rows" id="flip-rows"></div>
+    <button class="btn more" id="flip-more" type="button" hidden>Show more</button>
+    <p class="note">Signals compare today's cheapest listing with the price 24 hours and 7 days ago. The target is the price before the dip, so profit assumes it climbs back, which it may not. Estimates only.</p>
+  </section>
+
+  <section id="view-craft">
+  <h1>Which materials are worth crafting?</h1>
+  <p class="sub">Crafting materials and consumables that sell on Siel, like Balaur leather, horns and scales, ranked by profit per craft at today's lowest listings. Gear isn't included.</p>
+
+  <section class="card filters" aria-label="Filters">
+    <label class="field wide"><span>Search</span><input id="q" type="search" placeholder="Optional: filter by item or material"></label>
+    <label class="field"><span>Profession</span><select id="prof"></select></label>
+    <div class="field"><span>Show</span>
+      <div class="seg" role="group" aria-label="Which recipes to show" id="show">
+        <button type="button" data-show="all">All</button>
+        <button type="button" data-show="profit">Profit</button>
+        <button type="button" data-show="loss">Loss</button>
+      </div>
+    </div>
+    <label class="field"><span>Craft fee (kinah)</span><input id="fee" class="n" inputmode="numeric" aria-label="Kinah fee per craft"></label>
+    <label class="field"><span>Market sales tax %</span><input id="tax" class="n" inputmode="decimal" aria-label="Market sales tax percent"></label>
+    <div class="field"><span>Sales</span><label class="check"><input type="checkbox" id="sold-only"> Only items that sold in the last 24h</label></div>
+  </section>
+
+  <div class="kinds" id="kinds" role="group" aria-label="Item type"></div>
+  <div class="tally" id="tally"></div>
+  <div class="list-head" id="list-head">
+    <span>Recipe</span>
+    <span><button type="button" data-sort="sell">Sells for</button></span>
+    <span><button type="button" data-sort="cost">Cost</button></span>
+    <span><button type="button" data-sort="profit">Profit / craft</button> · <button type="button" data-sort="margin">%</button></span>
+  </div>
+  <div class="rows" id="rows"></div>
+  <button class="btn more" id="more" type="button" hidden>Show more</button>
+  <p class="note" id="note"></p>
+  </section>
+</main>
+
+<script src="crafts.js"></script>
+<script>
+const SERVER = 11201; // Siel (NAW)
+const API = location.protocol.startsWith("http") ? "/api" : "https://aion2.exchange/api";
+const WIN = "24h";
+const PAGE = 50; // items per request when loading the whole market (about 1,000 items in all)
+const CACHE_MS = 5 * 60 * 1000;
+const STEP = 60; // rows shown per "Show more"
+const C = window.CRAFTS || { recipes: [], procs: [], updated: "" };
+if (!window.CRAFTS) addEventListener("DOMContentLoaded", () => {
+  const w = document.getElementById("api-warn"); w.hidden = false; w.textContent = "The recipe list (crafts.js) is missing from this folder, so there is nothing to price.";
+});
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+const state = {
+  q: "", kind: store.get("cp.kind2", "material"), prof: store.get("cp.prof", ""), show: store.get("cp.show", "all"), sort: store.get("cp.sort", "profit"),
+  fee: store.get("cp.fee", 0), tax: store.get("cp.tax", 10), soldOnly: store.get("cp.soldOnly", false),
+  overrides: store.get("fl.overrides", {}), // shared with the calculator: prices you typed in yourself
+  limit: STEP,
+};
+const market = store.get("fl.market", {}); // shared with the calculator: name -> {found, price, listings, sold, at, trend}
+const open = new Set();
+
+const fmt = n => (n == null ? "—" : Math.round(n).toLocaleString("en-US"));
+const esc = t => String(t).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const lc = s => (s || "").toLowerCase();
+const parseNum = t => { const v = parseFloat(String(t).replace(/,/g, "")); return Number.isFinite(v) ? v : null; };
+
+// ---------- recipe data ----------
+const variants = new Map(); // item name -> recipes that make it
+for (const r of C.recipes) { if (!variants.has(r.name)) variants.set(r.name, []); variants.get(r.name).push(r); }
+const procs = new Map(); // base item -> [{name, chance}] Splendent results a craft can turn into
+for (const p of C.procs) { if (!procs.has(p.of)) procs.set(p.of, []); procs.get(p.of).push(p); }
+const usable = name => variants.get(name) || [];
+const allNames = [...new Set([...C.recipes.flatMap(r => [r.name, ...Object.keys(r.mats)]), ...C.procs.map(p => p.name)])];
+
+// ---------- prices ----------
+function priceOf(name) {
+  if (state.overrides[name] != null) return state.overrides[name];
+  const m = market[name];
+  return m && m.found ? m.price : null;
+}
+function record(name, it, win = WIN) {
+  const price = it && typeof it.price === "number" ? it.price : null;
+  market[name] = {
+    found: !!it && it.listed !== false && price != null, price, listings: it?.listings ?? null,
+    sold: it?.units_sold ?? null, category: it?.category?.name ?? null, section: it?.category?.section_name ?? null, at: Date.now(),
+    trend: { ...(market[name]?.trend || {}), [win]: { pct: it?.change_pct ?? null, basis: it?.change_basis_seconds ?? null, at: Date.now() } },
+  };
+}
+const fresh = n => market[n] && Date.now() - market[n].at < CACHE_MS && market[n].trend?.[WIN] && market[n].trend?.["7d"];
+function saveMarket() { store.set("fl.market", market); }
+
+// The whole market a page at a time, so one load prices every recipe. Throws if the API won't list without a search.
+async function loadAll(force, token, win = WIN) {
+  const seen = new Map();
+  let offset = 0, total = null, firstPrev = null;
+  for (let page = 0; page < 300; page++) {
+    const qs = new URLSearchParams({ server: SERVER, sort: "name", order: "asc", window: win, limit: PAGE, offset });
+    if (force) qs.set("fresh", Date.now());
+    const res = await fetch(`${API}/items?${qs}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = Array.isArray(data) ? data : data.items || [];
+    total = data.total ?? data.count ?? total;
+    if (!items.length) break;
+    if (items[0].name === firstPrev) throw new Error("listing ignores offset"); // same page twice: can't page through
+    firstPrev = items[0].name;
+    for (const it of items) seen.set(lc(it.name), it);
+    offset += items.length;
+    if (token !== loadToken) return null;
+    setStatus("loading", `Loading ${win} market ${fmt(offset)}${total ? ` / ${fmt(total)}` : ""}`);
+    if (total && offset >= total) break;
+  }
+  if (seen.size < 50) throw new Error("listing returned too few items");
+  for (const it of seen.values()) record(it.name, it, win); // every market item, so gathered resources outside recipes show too
+  for (const n of allNames) if (!seen.has(lc(n))) record(n, null, win);
+  return true;
+}
+// Fallback: search each name on its own (slow, but works whenever the calculator works)
+async function lookup(name, force) {
+  const qs = new URLSearchParams({ server: SERVER, q: name, sort: "name", order: "asc", window: WIN, limit: 50, offset: 0 });
+  if (force) qs.set("fresh", Date.now());
+  const res = await fetch(`${API}/items?${qs}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  const items = Array.isArray(data) ? data : data.items || [];
+  record(name, items.find(i => lc(i.name) === lc(name)));
+}
+async function loadOneByOne(names, force, token) {
+  const queue = [...names];
+  let done = 0, failed = 0;
+  const worker = async () => {
+    while (queue.length && token === loadToken) {
+      const n = queue.shift();
+      try { await lookup(n, force); } catch (e) { failed++; lastError = e; }
+      if (++done % 20 === 0) { setStatus("loading", `Loading prices ${done} / ${names.length}`); saveMarket(); render(); }
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  return failed < names.length;
+}
+let loadToken = 0, lastError = null;
+async function loadPrices(force = false) {
+  const todo = force ? allNames : allNames.filter(n => !fresh(n));
+  if (!todo.length) { setStatus("live"); return render(); }
+  const token = ++loadToken;
+  setStatus("loading", "Loading market…");
+  let ok;
+  try {
+    ok = await loadAll(force, token);
+    // the 7-day change feeds the flip finder; prices still load if this part fails
+    if (ok) await loadAll(force, token, "7d").catch(e => console.info("7-day change unavailable:", e.message));
+  }
+  catch (e) { console.info("Whole-market listing unavailable, searching items one by one:", e.message); ok = await loadOneByOne(todo, force, token); }
+  if (token !== loadToken) return;
+  saveMarket();
+  setStatus(ok ? "live" : "error");
+  if (ok) noticeChanges();
+  render();
+}
+function setStatus(st, text) {
+  document.getElementById("status").dataset.state = st;
+  const warn = document.getElementById("api-warn");
+  warn.hidden = st !== "error";
+  if (st === "error") {
+    warn.innerHTML = location.protocol.startsWith("http")
+      ? `Couldn't reach aion2.exchange (${esc(lastError?.message || "network error")}). Press Refresh prices to try again.`
+      : `Prices can't load when the page is opened as a file. Start it with <b>python serve.py</b> in this folder.`;
+  }
+  const newest = Math.max(0, ...allNames.map(n => market[n]?.at || 0));
+  document.getElementById("status-text").textContent =
+    text || (st === "live" ? `Prices updated ${ago(newest)}` : st === "error" ? "Prices unavailable" : "Waiting");
+}
+function ago(t) {
+  const m = Math.round((Date.now() - t) / 60000);
+  return !t ? "never" : m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+}
+
+// ---------- cost model ----------
+// Cheapest way to get one unit: buy it, or craft it (per unit of the recipe's yield), whichever costs less.
+let memo = new Map();
+function unitCost(name, path = new Set()) {
+  if (memo.has(name)) return memo.get(name);
+  const buy = priceOf(name);
+  let best = buy != null ? { cost: buy, how: "buy", missing: [] } : null, firstMissing = null;
+  if (!path.has(name)) {
+    path.add(name);
+    for (const r of usable(name)) {
+      const c = craftCost(r, path);
+      if (c.missing.length) { firstMissing = firstMissing || c.missing; continue; }
+      const per = c.cost / r.yield;
+      if (!best || per < best.cost) best = { cost: per, how: "craft", recipe: r, missing: [] };
+    }
+    path.delete(name);
+  }
+  const out = best || { cost: null, how: "none", missing: firstMissing || [name] };
+  memo.set(name, out);
+  return out;
+}
+function craftCost(r, path = new Set()) {
+  let cost = state.fee;
+  const missing = [], lines = [];
+  for (const [m, q] of Object.entries(r.mats)) {
+    const u = unitCost(m, path);
+    lines.push({ name: m, qty: q, ...u });
+    if (u.cost == null) missing.push(...u.missing); else cost += u.cost * q;
+  }
+  return { cost, missing: [...new Set(missing)], lines };
+}
+// One row per sellable item, using its cheapest usable recipe
+function evaluate() {
+  memo = new Map();
+  const keep = 1 - state.tax / 100, rows = [];
+  for (const [name] of variants) {
+    const recs = usable(name);
+    const m = market[name];
+    if (!recs.length || !m?.found) continue;
+    const sell = priceOf(name);
+    let best = null;
+    for (const r of recs) {
+      const c = craftCost(r);
+      const bonus = (procs.get(name) || []).map(p => ({ ...p, price: priceOf(p.name) }));
+      // a great success turns the craft into its Splendent version, worth that item's price instead
+      const each = bonus.reduce((v, p) => v + p.chance * ((p.price ?? sell) - sell), sell);
+      const revenue = each * r.yield * keep;
+      const row = { name, r, sell, each, revenue, bonus, ...c, profit: c.missing.length ? null : revenue - c.cost, sold: m.sold, listings: m.listings };
+      row.margin = row.profit == null || !c.cost ? null : row.profit / c.cost * 100;
+      if (!best || (row.profit ?? -Infinity) > (best.profit ?? -Infinity)) best = row;
+    }
+    best.kind = typeOf(name, recs[0].kind);
+    if (best.kind !== "gear") rows.push(best); // materials and consumables only, not gear
+  }
+  // market items with no recipe (gathered, dropped or bought): selling one earns its price after tax
+  for (const name of new Set([...allNames, ...Object.keys(market)])) {
+    const m = market[name];
+    if (variants.has(name) || procNames.has(name) || !m?.found) continue;
+    const kind = typeOf(name, "gathered");
+    if (!["gathered", "material", "consumable"].includes(kind)) continue;
+    const sell = priceOf(name);
+    rows.push({ name, kind, sellOnly: true, sell, revenue: sell * keep, cost: 0, missing: [], profit: sell * keep, margin: null, sold: m.sold, listings: m.listings,
+      uses: usedIn.get(name) || [] });
+  }
+  return rows;
+}
+const procNames = new Set(C.procs.map(p => p.name));
+const usedIn = new Map(); // material -> recipe names that use it
+for (const r of C.recipes) for (const m of Object.keys(r.mats)) { if (!usedIn.has(m)) usedIn.set(m, new Set()); usedIn.get(m).add(r.name); }
+for (const [m, set] of usedIn) usedIn.set(m, [...set]);
+// The market's own category when it has one, else the recipe item's id range
+function typeOf(name, fallback) {
+  const m = market[name], t = lc(`${m?.category || ""} ${m?.section || ""}`);
+  if (/gather/.test(t)) return "gathered";
+  if (/craft/.test(t)) return "material";
+  if (/consum|collect/.test(t)) return "consumable";
+  if (/weapon|armor|armour|accessor/.test(t)) return "gear";
+  if (/\(bound\)/i.test(name)) return "bound";
+  return fallback;
+}
+const KINDS = [["material", "Crafting materials"], ["consumable", "Consumables & collectibles"], ["gathered", "Gathered resources"], ["", "All crafts"]];
+
+// ---------- rendering ----------
+const SORTS = {
+  profit: (a, b) => (b.profit ?? -Infinity) - (a.profit ?? -Infinity),
+  margin: (a, b) => (b.margin ?? -Infinity) - (a.margin ?? -Infinity),
+  sell: (a, b) => b.sell - a.sell,
+  cost: (a, b) => (b.missing.length ? -1 : b.cost) - (a.missing.length ? -1 : a.cost),
+};
+const kindOk = x => state.kind ? x.kind === state.kind : !x.sellOnly;
+function matches(row, q) {
+  return !q || lc(row.name).includes(q) || Object.keys(row.r?.mats || {}).some(m => lc(m).includes(q));
+}
+function render() {
+  if (flip.view === "flip") return renderFlips();
+  if (flip.view === "advice") return renderAdvice();
+  const all = evaluate.cache = evaluate();
+  const q = lc(state.q.trim());
+  const base = all.filter(x => (!state.prof || x.sellOnly || x.r.profession === state.prof) && (!state.soldOnly || x.sold > 0) && matches(x, q));
+  document.getElementById("kinds").innerHTML = KINDS.map(([k, label]) =>
+    `<button type="button" data-kind="${k}" aria-pressed="${state.kind === k}">${label}<span>${base.filter(x => k ? x.kind === k : !x.sellOnly).length}</span></button>`).join("");
+  const pool = base.filter(kindOk);
+  const gathered = state.kind === "gathered";
+  const win = pool.filter(x => !x.sellOnly && x.profit > 0), lose = pool.filter(x => !x.sellOnly && x.profit != null && x.profit <= 0), unknown = pool.filter(x => !x.sellOnly && x.profit == null);
+  const crafts = pool.filter(x => !x.sellOnly), sellOnly = pool.filter(x => x.sellOnly).sort(SORTS.sell);
+  const shown = [...(state.show === "all" || gathered ? crafts : state.show === "profit" ? win : lose).sort(SORTS[state.sort]),
+    ...(state.show === "all" || gathered ? sellOnly : [])]; // items you can only sell go after the crafts
+
+  document.getElementById("tally").innerHTML =
+    gathered ? `<span><b>${pool.length}</b> gathered resources on the market, highest price first. You keep the price after ${state.tax}% tax; open one to see what it can be crafted into.</span>` :
+    `<span class="good"><b>${win.length}</b> profitable</span><span class="bad"><b>${lose.length}</b> losing</span>` +
+    (unknown.length ? `<span><b>${unknown.length}</b> missing a material price</span>` : "") +
+    `<span><b>${pool.filter(x => !x.sellOnly).length}</b> sellable recipes</span>` +
+    (pool.some(x => x.sellOnly) ? `<span><b>${pool.filter(x => x.sellOnly).length}</b> items with no recipe, listed after the crafts (Show: All)</span>` : "");
+  document.querySelectorAll("#list-head [data-sort]").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === state.sort));
+
+  const rowsEl = document.getElementById("rows");
+  if (!shown.length) {
+    const loading = document.getElementById("status").dataset.state === "loading";
+    rowsEl.innerHTML = `<div class="card empty">${loading ? "Loading market prices…" : state.q ? "Nothing matches your search." : "Nothing here yet. Try Show: All or another type."}</div>`;
+  } else {
+    rowsEl.innerHTML = shown.slice(0, state.limit).map(rowHtml).join("");
+  }
+  const more = document.getElementById("more");
+  more.hidden = shown.length <= state.limit;
+  more.textContent = `Show more (${fmt(shown.length - state.limit)} left)`;
+}
+function rowHtml(x) {
+  if (x.sellOnly) return gatheredHtml(x);
+  const cls = x.profit == null ? "unk" : x.profit > 0 ? "good" : "bad";
+  const profit = x.profit == null ? "missing price" : `${x.profit > 0 ? "+" : ""}${fmt(x.profit)}`;
+  const meta = [x.r.profession, x.r.mastery != null ? `mastery ${x.r.mastery}` : "", x.r.yield > 1 ? `makes ${x.r.yield}` : "",
+    x.sold != null ? `${fmt(x.sold)} sold 24h` : "", x.listings != null ? `${fmt(x.listings)} listed` : ""].filter(Boolean).join(" · ");
+  return `<details class="row" data-name="${esc(x.name)}" ${open.has(x.name) ? "open" : ""}>
+    <summary>
+      <div class="what"><b>${esc(x.name)}</b><span class="meta">${esc(meta)}</span></div>
+      <div class="col"><small>Sells for</small>${fmt(x.sell * x.r.yield)}</div>
+      <div class="col"><small>Cost</small>${x.missing.length ? "—" : fmt(x.cost)}</div>
+      <div class="col profit ${cls}"><small>Profit / craft</small>${profit}${x.margin != null ? `<span class="pct">${x.margin > 0 ? "+" : ""}${x.margin.toFixed(1)}%</span>` : ""}</div>
+    </summary>
+    ${open.has(x.name) ? detailHtml(x) : ""}
+  </details>`;
+}
+function gatheredHtml(x) {
+  const meta = [market[x.name]?.category || "No recipe", x.sold != null ? `${fmt(x.sold)} sold 24h` : "", x.listings != null ? `${fmt(x.listings)} listed` : "",
+    x.uses.length ? `used in ${x.uses.length} recipe${x.uses.length > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
+  let detail = "";
+  if (open.has(x.name)) {
+    const crafts = evaluate.cache.filter(r => !r.sellOnly && x.uses.includes(r.name) && r.profit != null).sort(SORTS.profit).slice(0, 8);
+    detail = `<div class="detail">${crafts.length ? `<p class="how">Recipes that use it, by profit (they value it at its market price):</p><ul class="uses">${crafts.map(r =>
+      `<li><span>${esc(r.name)} <span class="how">×${r.r.mats[x.name]}</span></span><b class="num profit ${r.profit > 0 ? "good" : "bad"}">${r.profit > 0 ? "+" : ""}${fmt(r.profit)}</b></li>`).join("")}</ul>`
+      : `<p class="how">No sellable recipe uses it, so selling it is the way to earn from it.</p>`}</div>`;
+  }
+  return `<details class="row" data-name="${esc(x.name)}" ${open.has(x.name) ? "open" : ""}>
+    <summary>
+      <div class="what"><b>${esc(x.name)}</b><span class="meta">${esc(meta)}</span></div>
+      <div class="col"><small>Sells for</small>${fmt(x.sell)}</div>
+      <div class="col"><small>Cost</small>${x.kind === "gathered" ? "gathered" : "no recipe"}</div>
+      <div class="col profit good"><small>You keep</small>${fmt(x.revenue)}</div>
+    </summary>${detail}
+  </details>`;
+}
+function detailHtml(x) {
+  const lines = x.lines.map(l => {
+    const how = l.how === "craft" ? `<span class="how craft">cheaper to craft (${fmt(l.cost)} each)</span>`
+      : l.how === "buy" ? `<span class="how">${state.overrides[l.name] != null ? "your price" : "market"} ${fmt(l.cost)} each</span>`
+      : `<span class="how missing">no price</span>`;
+    const input = l.how !== "craft" ? `<input data-price="${esc(l.name)}" inputmode="numeric" placeholder="price" value="${state.overrides[l.name] != null ? fmt(state.overrides[l.name]) : ""}" aria-label="Your price for ${esc(l.name)}">` : "";
+    return `<tr><td>${esc(l.name)} ×${l.qty}<br>${how}</td><td class="r">${l.cost == null ? "—" : fmt(l.cost * l.qty)}</td><td class="r">${input}</td></tr>`;
+  }).join("");
+  const keep = 1 - state.tax / 100;
+  const bonus = x.bonus.map(p => `<div><dt>${Math.round(p.chance * 100)}% chance it comes out ${esc(p.name)}</dt><dd>${p.price == null ? "not listed" : fmt(p.price)}</dd></div>`).join("");
+  return `<div class="detail">
+    <table>${lines}${state.fee ? `<tr><td>Craft fee</td><td class="r">${fmt(state.fee)}</td><td></td></tr>` : ""}</table>
+    <dl class="sum">
+      ${bonus}
+      <div><dt>Sale value per craft${x.r.yield > 1 ? ` (${x.r.yield} items)` : ""}${x.bonus.length ? ", average" : ""}</dt><dd>${fmt(x.each * x.r.yield)}</dd></div>
+      <div><dt>After ${state.tax}% market tax</dt><dd>${fmt(x.revenue)}</dd></div>
+      <div><dt>Materials${state.fee ? " and fee" : ""}</dt><dd>${x.missing.length ? `<span class="missing">needs ${x.missing.length} price${x.missing.length > 1 ? "s" : ""}</span>` : fmt(x.cost)}</dd></div>
+      <div><dt>Profit per craft</dt><dd class="profit ${x.profit == null ? "unk" : x.profit > 0 ? "good" : "bad"}">${x.profit == null ? "—" : fmt(x.profit)}</dd></div>
+    </dl>
+    ${x.missing.length ? `<p class="how missing">Type a price for ${x.missing.map(esc).join(", ")} to finish this one. Bound items can't be bought on the market, so use what the NPC charges.</p>` : ""}
+  </div>`;
+}
+
+// ---------- flip finder ----------
+const flip = { view: store.get("cp.view", "advice"), q: "", signal: store.get("cp.signal", "dip"), dipMin: store.get("cp.dipMin", 15), limit: STEP };
+const THIN = 8;   // this many listings or fewer: few sellers, list high
+const BUSY = 10;  // a dip only counts with this many listings, so one odd listing isn't a signal
+const SPIKE = 15; // % above the weekly price that counts as a spike
+// price `win` ago, worked out from today's price and the % change
+function pastPrice(m, win) {
+  const t = m.trend?.[win];
+  return t && Number.isFinite(t.pct) && t.pct > -100 ? m.price / (1 + t.pct / 100) : null;
+}
+function flipRows() {
+  const keep = 1 - state.tax / 100, out = [];
+  for (const [name, m] of Object.entries(market)) {
+    if (!m?.found || !m.category || !isTrade(m)) continue; // whole-market items, materials and consumables only
+    const p = m.price, d24 = m.trend?.["24h"]?.pct, d7 = m.trend?.["7d"]?.pct;
+    const before = Math.max(pastPrice(m, "24h") ?? 0, pastPrice(m, "7d") ?? 0) || null; // the higher of the two recent prices
+    const drop = before ? (1 - p / before) * 100 : 0;
+    const row = { name, m, p, d24, d7, breakEven: p / keep, signals: [] };
+    if (drop >= flip.dipMin && (m.listings ?? 0) >= BUSY) {
+      row.signals.push("dip");
+      row.target = before;
+      row.profit = before * keep - p;
+    }
+    if (Number.isFinite(d7) && d7 >= SPIKE) row.signals.push("spike");
+    if ((m.listings ?? 99) <= THIN) row.signals.push("thin");
+    out.push(row);
+  }
+  return out;
+}
+const pctText = v => (Number.isFinite(v) ? `${v > 0 ? "+" : ""}${v.toFixed(1)}%` : "—");
+function renderFlips() {
+  const q = lc(flip.q.trim());
+  const rows = flipRows().filter(x => !q || lc(x.name).includes(q));
+  const count = sig => rows.filter(x => x.signals.includes(sig)).length;
+  const shown = rows.filter(x => flip.signal === "all" ? true : x.signals.includes(flip.signal))
+    .sort(flip.signal === "dip" ? (a, b) => (b.profit ?? -1) / b.p - (a.profit ?? -1) / a.p
+      : flip.signal === "spike" ? (a, b) => (b.d7 ?? -999) - (a.d7 ?? -999)
+      : flip.signal === "thin" ? (a, b) => b.p - a.p
+      : (a, b) => a.name.localeCompare(b.name));
+  const has7d = rows.some(x => Number.isFinite(x.d7));
+  document.getElementById("flip-tally").innerHTML = !rows.length
+    ? `<span>${document.getElementById("status").dataset.state === "loading" ? "Loading the whole market…" : "Flip finder needs the whole-market price list, which didn't load. Press Refresh prices."}</span>`
+    : `<span class="good"><b>${count("dip")}</b> dips</span><span><b>${count("spike")}</b> spikes</span><span><b>${count("thin")}</b> few-seller markets</span><span><b>${rows.length}</b> items checked</span>` +
+      (has7d ? "" : `<span>7-day change didn't load, so only 24-hour dips show.</span>`);
+  document.getElementById("flip-rows").innerHTML = shown.length ? shown.slice(0, flip.limit).map(flipHtml).join("")
+    : rows.length ? `<div class="card empty">Nothing right now. Try a smaller dip % or another signal.</div>` : "";
+  const more = document.getElementById("flip-more");
+  more.hidden = shown.length <= flip.limit;
+  more.textContent = `Show more (${fmt(shown.length - flip.limit)} left)`;
+  document.querySelectorAll(".tax-pct").forEach(e => { e.textContent = state.tax; });
+  document.querySelectorAll(".be-pct").forEach(e => { e.textContent = (100 / (1 - state.tax / 100) - 100).toFixed(1); });
+}
+function flipHtml(x) {
+  const tags = x.signals.map(s => `<span class="tag ${s}">${{ dip: "Dip", spike: "Spike", thin: "Few sellers" }[s]}</span>`).join("");
+  const meta = [x.m.category, `${fmt(x.m.listings)} listed`, `24h ${pctText(x.d24)}`, `7d ${pctText(x.d7)}`].filter(Boolean).join(" · ");
+  const advice = x.signals.includes("dip") ? `<div class="col profit good"><small>Target · profit each</small>${fmt(x.target)}<span class="pct">+${fmt(x.profit)} after tax</span></div>`
+    : x.signals.includes("spike") ? `<div class="col"><small>Advice</small>Sell if you hold it<span class="pct">up ${pctText(x.d7)} this week</span></div>`
+    : x.signals.includes("thin") ? `<div class="col"><small>Advice</small>List at ${fmt(x.p)} or more<span class="pct">only ${fmt(x.m.listings)} sellers</span></div>`
+    : `<div class="col"><small>Advice</small>—</div>`;
+  return `<div class="row flip"><summary>
+    <div class="what"><b>${esc(x.name)}</b>${tags}<span class="meta">${esc(meta)}</span></div>
+    <div class="col"><small>Cheapest</small>${fmt(x.p)}</div>
+    <div class="col"><small>Break-even</small>${fmt(x.breakEven)}</div>
+    ${advice}
+  </summary></div>`;
+}
+// ---------- advisor ----------
+const bag = store.get("cp.bag", {}); // name -> {qty, paid}
+const watch = { on: store.get("cp.watch", false), notify: store.get("cp.notify", false), seen: new Set(store.get("cp.seen", [])), fresh: new Set(), timer: null };
+const WATCH_MS = 5 * 60 * 1000;
+const TOP = 6;
+const isTrade = m => /material|consum|collect/i.test(`${m?.section || ""} ${m?.category || ""}`);
+function bagAdvice(name, it) {
+  const m = market[name], keep = 1 - state.tax / 100;
+  if (!m?.found) return { tag: "hold", text: "Not listed on the market right now, so there's no price to go by." };
+  const p = m.price, f = flipRows.cache?.find(x => x.name === name), qty = it.qty || 1;
+  const gain = it.paid ? (p * keep - it.paid) * qty : null;
+  const gainText = gain == null ? "" : ` That's <b>${gain >= 0 ? "+" : ""}${fmt(gain)}</b> against what you paid.`;
+  if (f?.signals.includes("dip")) return { tag: "hold", text: `Hold. The price just dropped to ${fmt(p)} from about ${fmt(f.target)}; wait for it to recover unless you need kinah now.${gainText}` };
+  if (it.paid && gain < 0) return { tag: "hold", text: `Hold. Selling at ${fmt(p)} keeps ${fmt(p * keep)} each after tax, less than the ${fmt(it.paid)} you paid. Break-even is ${fmt(it.paid / keep)}.` };
+  if (f?.signals.includes("spike")) return { tag: "sell", text: `Sell now: up ${pctText(f.d7)} this week. List at ${fmt(p - 1)} to sell first, you keep <b>${fmt((p - 1) * keep * qty)}</b>.${gainText}` };
+  if ((m.listings ?? 99) <= THIN) return { tag: "sell", text: `Sell. Only ${fmt(m.listings)} sellers, so list at ${fmt(p)} or a bit higher; you keep about <b>${fmt(p * keep * qty)}</b>.${gainText}` };
+  return { tag: "sell", text: `Sell at ${fmt(p - 1)} (1 under the cheapest of ${fmt(m.listings)} listings); you keep <b>${fmt((p - 1) * keep * qty)}</b>.${gainText}` };
+}
+function li(name, value, say, tags = "") {
+  const isNew = watch.fresh.has(name) ? `<span class="tag new">New</span>` : "";
+  return `<li><span>${esc(name)}${isNew}${tags}</span><span class="val">${value}</span><span class="say">${say}</span></li>`;
+}
+function renderAdvice() {
+  const flips = flipRows.cache = flipRows();
+  const crafts = evaluate.cache = evaluate();
+  const keep = 1 - state.tax / 100;
+  document.getElementById("item-names").innerHTML = Object.keys(market).filter(n => market[n]?.found).sort().map(n => `<option value="${esc(n)}">`).join("");
+  // bound shop items used by material and consumable recipes, most-used first
+  const npcUse = new Map();
+  for (const r of C.recipes) if (r.kind !== "gear") for (const m of Object.keys(r.mats)) if (/\(bound\)/i.test(m) && !variants.has(m)) npcUse.set(m, (npcUse.get(m) || 0) + 1);
+  const npc = [...npcUse.keys()].sort((a, b) => (state.overrides[a] != null) - (state.overrides[b] != null) || npcUse.get(b) - npcUse.get(a) || a.localeCompare(b));
+  const npcEl = document.getElementById("npc");
+  if (!npcEl.contains(document.activeElement)) npcEl.innerHTML = npc.map(n => `<li><span>${esc(n)} <span class="how">used in ${npcUse.get(n)} recipe${npcUse.get(n) > 1 ? "s" : ""}</span></span>
+    <input data-price="${esc(n)}" inputmode="numeric" placeholder="shop price" value="${state.overrides[n] != null ? fmt(state.overrides[n]) : ""}" aria-label="Shop price for ${esc(n)}"></li>`).join("");
+  const bagNames = Object.keys(bag);
+  document.getElementById("bag").innerHTML = bagNames.length ? bagNames.map(n => {
+    const a = bagAdvice(n, bag[n]);
+    return `<li><span>${esc(n)} <span class="how">×${fmt(bag[n].qty || 1)}</span><span class="tag ${a.tag}">${a.tag === "sell" ? "Sell" : "Hold"}</span></span>
+      <span class="val">${fmt(priceOf(n))} <button class="x" type="button" data-unbag="${esc(n)}" aria-label="Remove ${esc(n)}">×</button></span><span class="say">${a.text}</span></li>`;
+  }).join("") : `<li><span class="say">Add items you have, like gathered materials or drops, and the advisor tells you whether to sell now or hold.</span></li>`;
+
+  const craftTop = crafts.filter(x => !x.sellOnly && x.profit > 0).sort(SORTS.profit).slice(0, TOP);
+  document.getElementById("adv-craft").innerHTML = craftTop.map(x => li(x.name, `+${fmt(x.profit)}`,
+    `${esc(x.r.profession)}${x.r.mastery != null ? ` ${x.r.mastery}` : ""}. Materials ${fmt(x.cost)}, sells for ${fmt(x.sell * x.r.yield)}${x.r.yield > 1 ? ` (${x.r.yield} made)` : ""}, ${fmt(x.listings)} listed.`)).join("")
+    || `<li><span class="say">No recipe makes a profit at today's prices${crafts.some(x => x.profit == null && !x.sellOnly) ? ". Some still need a shop price for a bound item (above)" : ""}.</span></li>`;
+
+  const dips = flips.filter(x => x.signals.includes("dip") && isTrade(x.m)).sort((a, b) => b.profit / b.p - a.profit / a.p).slice(0, TOP);
+  document.getElementById("adv-dip").innerHTML = dips.map(x => li(x.name, `+${fmt(x.profit)}`,
+    `Buy at ${fmt(x.p)}, was about ${fmt(x.target)}. Relist near ${fmt(x.target)} to make ${fmt(x.profit)} each after tax (${(x.profit / x.p * 100).toFixed(0)}%).`)).join("")
+    || `<li><span class="say">No good dips right now.</span></li>`;
+
+  const spikes = flips.filter(x => x.signals.includes("spike") && isTrade(x.m)).sort((a, b) => b.d7 - a.d7).slice(0, TOP);
+  document.getElementById("adv-spike").innerHTML = spikes.map(x => li(x.name, pctText(x.d7),
+    `Now ${fmt(x.p)}. If you have some, sell before others undercut; you keep ${fmt(x.p * keep)} each.`)).join("")
+    || `<li><span class="say">Nothing has jumped this week.</span></li>`;
+
+  // materials whose sale after tax beats their best use in a profitable recipe
+  const bestUse = new Map();
+  for (const x of crafts) if (!x.sellOnly && x.profit > 0) for (const m of Object.keys(x.r.mats)) bestUse.set(m, Math.max(bestUse.get(m) || 0, x.profit));
+  const raw = crafts.filter(x => x.sellOnly && x.kind !== "consumable" && (x.listings ?? 0) > 0)
+    .map(x => ({ ...x, use: bestUse.get(x.name) || 0 }))
+    .filter(x => x.use === 0 && x.uses.length).sort((a, b) => b.revenue - a.revenue).slice(0, TOP);
+  document.getElementById("adv-raw").innerHTML = raw.map(x => li(x.name, fmt(x.revenue),
+    `Used in ${x.uses.length} recipe${x.uses.length > 1 ? "s" : ""}, none profitable right now, so sell it: you keep ${fmt(x.revenue)} each.`)).join("")
+    || `<li><span class="say">Every material is worth more crafted right now.</span></li>`;
+
+  const info = document.getElementById("watch-info");
+  info.textContent = watch.on ? `Next check ${new Date(Date.now() + WATCH_MS).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
+  document.getElementById("notify").hidden = !watch.on || watch.notify || !("Notification" in window);
+}
+// after each load: anything that wasn't a signal last time is new; alert once per item
+function noticeChanges() {
+  const now = new Set();
+  const flips = flipRows();
+  for (const x of flips) if (isTrade(x.m) && (x.signals.includes("dip") || x.signals.includes("spike"))) now.add(x.name);
+  for (const n of Object.keys(bag)) if (bagAdvice(n, bag[n]).tag === "sell") now.add(`bag:${n}`);
+  const added = [...now].filter(n => !watch.seen.has(n));
+  watch.fresh = new Set(added.map(n => n.replace(/^bag:/, "")));
+  watch.seen = now; store.set("cp.seen", [...now]);
+  if (watch.on && watch.notify && added.length && "Notification" in window && Notification.permission === "granted") {
+    const names = added.map(n => n.replace(/^bag:/, ""));
+    new Notification("AION 2 market: new chances", { body: `${names.slice(0, 4).join(", ")}${names.length > 4 ? ` and ${names.length - 4} more` : ""}` });
+  }
+}
+function setWatch(on) {
+  watch.on = on; store.set("cp.watch", on);
+  clearInterval(watch.timer);
+  if (on) watch.timer = setInterval(() => loadPrices(true), WATCH_MS);
+  render();
+}
+document.getElementById("watch").addEventListener("change", e => setWatch(e.target.checked));
+document.getElementById("notify").addEventListener("click", async () => {
+  const ok = await Notification.requestPermission();
+  watch.notify = ok === "granted"; store.set("cp.notify", watch.notify); render();
+});
+document.getElementById("bag-add").addEventListener("submit", e => {
+  e.preventDefault();
+  const name = document.getElementById("bag-name").value.trim();
+  const hit = Object.keys(market).find(n => lc(n) === lc(name)) || name;
+  if (!hit) return;
+  bag[hit] = { qty: parseNum(document.getElementById("bag-qty").value) || 1, paid: parseNum(document.getElementById("bag-paid").value) };
+  store.set("cp.bag", bag);
+  e.target.reset();
+  render();
+});
+document.getElementById("npc").addEventListener("change", e => {
+  const name = e.target.dataset?.price; if (name == null) return;
+  const v = parseNum(e.target.value);
+  if (v == null || v < 0) delete state.overrides[name]; else state.overrides[name] = v;
+  e.target.value = v == null ? "" : fmt(v);
+  store.set("fl.overrides", state.overrides);
+  e.target.blur(); render();
+});
+document.getElementById("bag").addEventListener("click", e => {
+  const n = e.target.dataset?.unbag; if (n == null) return;
+  delete bag[n]; store.set("cp.bag", bag); render();
+});
+
+function showView(v) {
+  flip.view = v; store.set("cp.view", v);
+  document.getElementById("view-flip").hidden = v !== "flip";
+  document.getElementById("view-advice").hidden = v !== "advice";
+  document.getElementById("view-craft").hidden = v !== "craft";
+  document.querySelectorAll(".views [data-view]").forEach(b => b.setAttribute("aria-selected", b.dataset.view === v));
+}
+document.querySelector(".views").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) { showView(b.dataset.view); render(); } });
+document.getElementById("fq").addEventListener("input", e => { flip.q = e.target.value; flip.limit = STEP; renderFlips(); });
+document.getElementById("signal").addEventListener("click", e => {
+  const b = e.target.closest("[data-signal]"); if (!b) return;
+  flip.signal = b.dataset.signal; store.set("cp.signal", flip.signal); flip.limit = STEP;
+  document.querySelectorAll("#signal button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  renderFlips();
+});
+document.getElementById("dip-min").addEventListener("change", e => {
+  const v = parseNum(e.target.value); flip.dipMin = v == null ? 15 : Math.min(95, Math.max(1, v));
+  e.target.value = flip.dipMin; store.set("cp.dipMin", flip.dipMin); renderFlips();
+});
+document.getElementById("flip-more").addEventListener("click", () => { flip.limit += STEP; renderFlips(); });
+
+// ---------- setup and events ----------
+function setup() {
+  const profs = [...new Set(C.recipes.map(r => r.profession).filter(Boolean))].sort();
+  const sel = document.getElementById("prof");
+  sel.innerHTML = `<option value="">All professions</option>` + profs.map(p => `<option ${p === state.prof ? "selected" : ""}>${esc(p)}</option>`).join("");
+  document.getElementById("fee").value = fmt(state.fee);
+  document.getElementById("tax").value = state.tax;
+  document.getElementById("sold-only").checked = state.soldOnly;
+  document.querySelectorAll("#show button").forEach(b => b.setAttribute("aria-pressed", b.dataset.show === state.show));
+  document.getElementById("note").innerHTML =
+    `Estimates only. Costs use the lowest market listing right now, and each material is bought or crafted, whichever is cheaper. ` +
+    `Large orders can cost more when few are listed, and an item only makes money if someone buys it, so check how many sold. ` +
+    `Global recipes only, from <a href="https://aion2hub.com/tools/crafting-calculator" target="_blank" rel="noopener" style="color:inherit">aion2hub.com</a> (${esc(C.updated)}); ` +
+    `where an item has several recipes, the cheapest one listed is used. Prices from aion2.exchange.`;
+}
+const rerender = () => { state.limit = STEP; render(); };
+document.getElementById("q").addEventListener("input", e => { state.q = e.target.value; rerender(); });
+document.getElementById("kinds").addEventListener("click", e => {
+  const b = e.target.closest("[data-kind]"); if (!b) return;
+  state.kind = b.dataset.kind; store.set("cp.kind2", state.kind); rerender();
+});
+document.getElementById("prof").addEventListener("change", e => { state.prof = e.target.value; store.set("cp.prof", state.prof); rerender(); });
+document.getElementById("show").addEventListener("click", e => {
+  const b = e.target.closest("[data-show]"); if (!b) return;
+  state.show = b.dataset.show; store.set("cp.show", state.show);
+  document.querySelectorAll("#show button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  rerender();
+});
+document.getElementById("list-head").addEventListener("click", e => {
+  const b = e.target.closest("[data-sort]"); if (!b) return;
+  state.sort = b.dataset.sort; store.set("cp.sort", state.sort); rerender();
+});
+document.getElementById("fee").addEventListener("change", e => { state.fee = Math.max(0, parseNum(e.target.value) || 0); e.target.value = fmt(state.fee); store.set("cp.fee", state.fee); render(); });
+document.getElementById("tax").addEventListener("change", e => { const v = parseNum(e.target.value); state.tax = v == null ? 10 : Math.min(99, Math.max(0, v)); e.target.value = state.tax; store.set("cp.tax", state.tax); render(); });
+document.getElementById("sold-only").addEventListener("change", e => { state.soldOnly = e.target.checked; store.set("cp.soldOnly", state.soldOnly); rerender(); });
+document.getElementById("more").addEventListener("click", () => { state.limit += STEP; render(); });
+document.getElementById("refresh").addEventListener("click", () => loadPrices(true));
+document.getElementById("rows").addEventListener("toggle", e => {
+  const d = e.target; if (!d.matches?.("details.row")) return;
+  const name = d.dataset.name;
+  if (d.open === open.has(name)) return;
+  if (d.open) open.add(name); else open.delete(name);
+  render();
+}, true);
+document.getElementById("rows").addEventListener("change", e => {
+  const name = e.target.dataset?.price; if (name == null) return;
+  const v = parseNum(e.target.value);
+  if (v == null || v <= 0) delete state.overrides[name]; else state.overrides[name] = v;
+  store.set("fl.overrides", state.overrides);
+  render();
+});
+
+// ---------- access code ----------
+// Keeps casual visitors out; the page is static, so this isn't real security.
+const CODE_HASH = "bb7cd6ad4b3a4e98e4c9bd9ce14d2560159a1f86e5ad0966de3a93632fc6ce95"; // sha-256 of the code
+async function sha256(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+function unlock() {
+  document.getElementById("lock").hidden = true;
+  document.body.classList.remove("locked");
+  start();
+}
+document.getElementById("lock-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const input = document.getElementById("lock-code");
+  if (await sha256(input.value.trim()) === CODE_HASH) { store.set("cp.unlocked", CODE_HASH); unlock(); }
+  else { document.getElementById("lock-bad").textContent = "Wrong code."; input.select(); }
+});
+
+function start() {
+setup();
+showView(flip.view);
+document.getElementById("watch").checked = watch.on;
+if (watch.on) watch.timer = setInterval(() => loadPrices(true), WATCH_MS);
+document.getElementById("dip-min").value = flip.dipMin;
+document.querySelectorAll("#signal button").forEach(b => b.setAttribute("aria-pressed", b.dataset.signal === flip.signal));
+render();
+loadPrices();
+}
+if (store.get("cp.unlocked", "") === CODE_HASH) unlock();
+</script>
+</body>
+</html>
